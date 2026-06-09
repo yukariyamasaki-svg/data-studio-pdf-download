@@ -1,0 +1,13 @@
+{
+  "name": "data-studio-pdf-download",
+  "version": "1.0.0",
+  "description": "Download Google Data Studio report pages as PDF using Puppeteer",
+  "main": "script.js",
+  "scripts": {
+    "start": "node script.js"
+  },
+  "dependencies": {
+    "puppeteer": "^21.0.0",
+    "googleapis": "^118.0.0"
+  }
+}
