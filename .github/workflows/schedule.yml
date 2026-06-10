@@ -9,6 +9,7 @@ jobs:
   download:
     runs-on: ubuntu-latest
     env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
       PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: 'true'
       PUPPETEER_EXECUTABLE_PATH: '/usr/bin/chromium-browser'
 

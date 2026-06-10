@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>メディア業界 情報収集ツール</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+      background: #f5f7fa;
+      color: #333;
+      padding: 40px 20px;
+    }
+    h1 {
+      text-align: center;
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: #1a1a2e;
+    }
+    .subtitle {
+      text-align: center;
+      font-size: 13px;
+      color: #888;
+      margin-bottom: 40px;
+    }
+
+    /* フロー全体 */
+    .flow {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+      max-width: 700px;
+      margin: 0 auto 60px;
+    }
+
+    /* トリガー */
+    .trigger {
+      background: #1a1a2e;
+      color: #fff;
+      border-radius: 12px;
+      padding: 14px 32px;
+      font-size: 14px;
+      font-weight: 600;
+      text-align: center;
+      width: 100%;
+    }
+    .trigger span {
+      font-size: 12px;
+      font-weight: 400;
+      color: #aaa;
+      display: block;
+      margin-top: 2px;
+    }
+
+    .arrow {
+      width: 2px;
+      height: 32px;
+      background: #ccc;
+      position: relative;
+    }
+    .arrow::after {
+      content: '';
+      position: absolute;
+      bottom: -8px;
+      left: 50%;
+      transform: translateX(-50%);
+      border-left: 7px solid transparent;
+      border-right: 7px solid transparent;
+      border-top: 10px solid #ccc;
+    }
+
+    /* 情報収集ボックス */
+    .collect-box {
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px;
+      width: 100%;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+      border: 2px solid #e8eaf6;
+    }
+    .collect-box h2 {
+      font-size: 13px;
+      font-weight: 700;
+      color: #5c6bc0;
+      margin-bottom: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .sources {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .source-group {
+      background: #f5f7ff;
+      border-radius: 8px;
+      padding: 12px 14px;
+    }
+    .source-group h3 {
+      font-size: 12px;
+      font-weight: 700;
+      color: #3949ab;
+      margin-bottom: 8px;
+    }
+    .source-group ul {
+      list-style: none;
+      font-size: 12px;
+      color: #555;
+      line-height: 1.8;
+    }
+    .source-group ul li::before {
+      content: '• ';
+      color: #9fa8da;
+    }
+    .free-badge {
+      display: inline-block;
+      background: #e8f5e9;
+      color: #2e7d32;
+      font-size: 10px;
+      font-weight: 700;
+      border-radius: 4px;
+      padding: 1px 6px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+
+    /* 分類ボックス */
+    .classify-box {
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px;
+      width: 100%;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+      border: 2px solid #fce4ec;
+    }
+    .classify-box h2 {
+      font-size: 13px;
+      font-weight: 700;
+      color: #e91e63;
+      margin-bottom: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .categories {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+    .category {
+      background: #fce4ec;
+      border-radius: 8px;
+      padding: 12px;
+      text-align: center;
+    }
+    .category .icon { font-size: 22px; margin-bottom: 6px; }
+    .category .label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #880e4f;
+      margin-bottom: 4px;
+    }
+    .category .desc {
+      font-size: 11px;
+      color: #ad1457;
+      line-height: 1.5;
+    }
+
+    /* Slack投稿ボックス */
+    .slack-box {
+      background: #4a154b;
+      border-radius: 12px;
+      padding: 20px;
+      width: 100%;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      color: #fff;
+      text-align: center;
+    }
+    .slack-box h2 {
+      font-size: 13px;
+      font-weight: 700;
+      color: #e8d5e8;
+      margin-bottom: 6px;
+    }
+    .slack-box .channel {
+      font-size: 16px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .slack-box .channel span {
+      background: rgba(255,255,255,0.15);
+      border-radius: 6px;
+      padding: 4px 10px;
+    }
+
+    /* プレビュー */
+    .preview-section {
+      max-width: 700px;
+      margin: 0 auto 60px;
+    }
+    .preview-section h2 {
+      font-size: 16px;
+      font-weight: 700;
+      color: #1a1a2e;
+      margin-bottom: 16px;
+      padding-left: 4px;
+      border-left: 4px solid #5c6bc0;
+      padding-left: 12px;
+    }
+    .slack-preview {
+      background: #1a1d21;
+      border-radius: 12px;
+      padding: 24px;
+      font-family: 'Slack-Lato', 'Helvetica Neue', sans-serif;
+      color: #d1d2d3;
+      font-size: 14px;
+      line-height: 1.7;
+    }
+    .slack-preview .bot-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .slack-preview .bot-icon {
+      width: 36px;
+      height: 36px;
+      background: #5c6bc0;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+    .slack-preview .bot-name {
+      font-weight: 700;
+      color: #fff;
+      font-size: 14px;
+    }
+    .slack-preview .bot-time {
+      font-size: 11px;
+      color: #777;
+    }
+    .slack-preview .msg-title {
+      font-weight: 700;
+      color: #fff;
+      font-size: 15px;
+      margin-bottom: 16px;
+    }
+    .slack-preview .section {
+      margin-bottom: 14px;
+    }
+    .slack-preview .section-title {
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 6px;
+    }
+    .slack-preview .item {
+      padding-left: 8px;
+      color: #b0b8c1;
+      font-size: 13px;
+    }
+    .slack-preview .item a {
+      color: #4fc3f7;
+      text-decoration: none;
+    }
+    .slack-preview .footer {
+      font-size: 11px;
+      color: #555;
+      margin-top: 14px;
+      font-style: italic;
+    }
+
+    /* コスト表 */
+    .cost-section {
+      max-width: 700px;
+      margin: 0 auto 40px;
+    }
+    .cost-section h2 {
+      font-size: 16px;
+      font-weight: 700;
+      color: #1a1a2e;
+      margin-bottom: 16px;
+      border-left: 4px solid #2e7d32;
+      padding-left: 12px;
+    }
+    .cost-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    }
+    .cost-table th {
+      background: #e8f5e9;
+      color: #2e7d32;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 10px 16px;
+      text-align: left;
+    }
+    .cost-table td {
+      padding: 10px 16px;
+      font-size: 13px;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .cost-table tr:last-child td { border-bottom: none; }
+    .cost-table .total td {
+      font-weight: 700;
+      background: #f1f8e9;
+      color: #2e7d32;
+    }
+    .free { color: #2e7d32; font-weight: 700; }
+  </style>
+</head>
+<body>
+
+  <h1>📰 メディア業界 情報収集ツール</h1>
+  <p class="subtitle">SmartNews メディアパートナーシップチーム向け 自動Slack投稿システム</p>
+
+  <!-- フロー図 -->
+  <div class="flow">
+
+    <!-- トリガー -->
+    <div class="trigger">
+      ⏰ 毎朝9時 自動実行
+      <span>Google Apps Script タイムトリガー</span>
+    </div>
+
+    <div class="arrow"></div>
+
+    <!-- 情報収集 -->
+    <div class="collect-box">
+      <h2>① 情報収集</h2>
+      <div class="sources">
+        <div class="source-group">
+          <h3>RSSフィード <span class="free-badge">無料</span></h3>
+          <ul>
+            <li>Media Innovation</li>
+            <li>PR TIMES（メディア）</li>
+            <li>東洋経済オンライン</li>
+            <li>ダイヤモンド・オンライン</li>
+            <li>プレジデントオンライン</li>
+          </ul>
+        </div>
+        <div class="source-group">
+          <h3>Google News API <span class="free-badge">無料</span></h3>
+          <ul>
+            <li>メディア 人事 就任</li>
+            <li>編集長 就任 交代</li>
+            <li>メディア 買収 提携</li>
+            <li>ニュースメディア 新サービス</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow"></div>
+
+    <!-- 自動分類 -->
+    <div class="classify-box">
+      <h2>② 自動分類（キーワードベース）</h2>
+      <div class="categories">
+        <div class="category">
+          <div class="icon">👤</div>
+          <div class="label">人事情報</div>
+          <div class="desc">就任・退任・<br>編集長・役員など</div>
+        </div>
+        <div class="category">
+          <div class="icon">📢</div>
+          <div class="label">業界ニュース</div>
+          <div class="desc">買収・提携・<br>新サービスなど</div>
+        </div>
+        <div class="category">
+          <div class="icon">🤝</div>
+          <div class="label">掲載媒体情報</div>
+          <div class="desc">パートナー媒体の<br>最新動向</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow"></div>
+
+    <!-- Slack投稿 -->
+    <div class="slack-box">
+      <h2>③ Slackに自動投稿</h2>
+      <div class="channel"><span>#jp-stardust-partner-support</span></div>
+    </div>
+
+  </div>
+
+  <!-- 投稿プレビュー -->
+  <div class="preview-section">
+    <h2>Slack投稿イメージ</h2>
+    <div class="slack-preview">
+      <div class="bot-header">
+        <div class="bot-icon">🤖</div>
+        <div>
+          <div class="bot-name">Media Intelligence Bot</div>
+          <div class="bot-time">今日 9:00</div>
+        </div>
+      </div>
+      <div class="msg-title">📰 メディア業界 日次ダイジェスト｜2026/06/04</div>
+      <div class="section">
+        <div class="section-title">👤 人事情報</div>
+        <div class="item">• 〇〇新聞社、山田氏が編集局長に就任（プレスリリース）<br><a href="#">https://prtimes.jp/...</a></div>
+      </div>
+      <div class="section">
+        <div class="section-title">📢 メディア業界ニュース</div>
+        <div class="item">• XX社がYYを買収、月間PV1億超のメディアグループへ（メディア業界）<br><a href="#">https://media-innovation.jp/...</a></div>
+      </div>
+      <div class="section">
+        <div class="section-title">🤝 SmartNews掲載媒体の最新情報</div>
+        <div class="item">• ダイヤモンド社が新サービス「○○」をリリース（ダイヤモンド）<br><a href="#">https://diamond.jp/...</a></div>
+      </div>
+      <div class="footer">このメッセージはGASで自動生成されています</div>
+    </div>
+  </div>
+
+  <!-- コスト -->
+  <div class="cost-section">
+    <h2>費用：すべて無料</h2>
+    <table class="cost-table">
+      <thead>
+        <tr>
+          <th>ツール</th>
+          <th>用途</th>
+          <th>費用</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Google Apps Script</td>
+          <td>スクリプト実行・自動スケジュール</td>
+          <td class="free">無料</td>
+        </tr>
+        <tr>
+          <td>RSSフィード</td>
+          <td>各メディアサイトからの記事収集</td>
+          <td class="free">無料</td>
+        </tr>
+        <tr>
+          <td>Google Custom Search API</td>
+          <td>キーワードでニュース検索（100件/日）</td>
+          <td class="free">無料</td>
+        </tr>
+        <tr>
+          <td>Slack Bot Token</td>
+          <td>チャンネルへの自動投稿</td>
+          <td class="free">無料</td>
+        </tr>
+        <tr class="total">
+          <td colspan="2">月額合計</td>
+          <td>0円</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</body>
+</html>
