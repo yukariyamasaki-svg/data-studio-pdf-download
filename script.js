@@ -1,4 +1,4 @@
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-core');
 const { google } = require('googleapis');
 const fs = require('fs');
 const path = require('path');
@@ -139,8 +139,21 @@ async function downloadPublisherPdf(browser, publisher) {
   return { filePath, fileName };
 }
 
+async function launchBrowser() {
+  const launchOptions = {
+    headless: 'new',
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  };
+
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  }
+
+  return puppeteer.launch(launchOptions);
+}
+
 async function main() {
-  const browser = await puppeteer.launch({ headless: 'new' });
+  const browser = await launchBrowser();
   try {
     for (const publisher of publishers) {
       try {
