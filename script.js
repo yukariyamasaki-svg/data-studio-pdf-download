@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const REPORT_URL = 'https://datastudio.google.com/u/0/reporting/6ab590f1-9fad-4bdb-8336-cd145cfbb35f/page/vnXDE';
-const DRIVE_FOLDER_ID = '1UK3wc7RJ-Mw69SxWJJ5NHNTUwVMxyea2';
+const DRIVE_FOLDER_ID = '1xkYmPLURyojCnzujByxWircjY3QWVlUa';
 
 const publishers = [
   '36Kr Japan',
