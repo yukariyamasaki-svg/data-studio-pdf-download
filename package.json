@@ -4,10 +4,12 @@
   "description": "Download Google Data Studio report pages as PDF using Puppeteer",
   "main": "script.js",
   "scripts": {
-    "start": "node script.js"
+    "start": "node script.js",
+    "get-refresh-token": "node get-refresh-token.js"
   },
   "dependencies": {
-    "puppeteer-core": "^20.0.0",
-    "googleapis": "^118.0.0"
+    "googleapis": "^118.0.0",
+    "playwright": "^1.60.0",
+    "puppeteer-core": "^25.1.0"
   }
 }

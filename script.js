@@ -1,4 +1,4 @@
-const puppeteer = require('puppeteer-core');
+const { chromium } = require('playwright');
 const { google } = require('googleapis');
 const fs = require('fs');
 const path = require('path');
@@ -80,10 +80,6 @@ const publishers = [
   '集英社オンライン'
 ];
 
-// Authentication fallback:
-// 1) Use GOOGLE_SERVICE_ACCOUNT_JSON for service account access.
-// 2) Otherwise use OAuth2 refresh token with GOOGLE_CLIENT_ID,
-//    GOOGLE_CLIENT_SECRET, and GOOGLE_REFRESH_TOKEN.
 async function getAuthClient() {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -133,143 +129,88 @@ function sanitizeFilename(name) {
   return name.replace(/[\/\\:*?"<>|]/g, '_');
 }
 
-async function downloadPublisherPdf(browser, publisher) {
-  const page = await browser.newPage();
-  await page.setViewport({ width: 1280, height: 1024 });
+async function applyPublisherFilter(page, publisher) {
+  // フレームも含めて input を探す
+  const selectors = [
+    'input[aria-label*="Publisher"]',
+    'input[placeholder*="Publisher"]',
+    'input[aria-label*="媒体"]',
+    'input[placeholder*="媒体"]',
+    'input[type="search"]',
+    'input'
+  ];
 
-  console.log(`Opening report for ${publisher}...`);
-  await page.goto(REPORT_URL, { waitUntil: 'networkidle2', timeout: 60000 });
-  await page.waitForTimeout(5000);
-  console.log(`Page loaded: ${page.url()} (${page.frames().length} frames)`);
-
-  // ========== カスタムのフィルタ操作 ==========
-  // 汎用フィルタ適用ロジック: 見つかれば publisher を指定して絞り込みます。
-  async function applyPublisherFilter(page, publisher) {
-    // Helper: try selector on page or within frames
-    async function trySelectors(root) {
-      const inputSelectors = [
-        'input[aria-label*="Publisher"]',
-        'input[placeholder*="Publisher"]',
-        'input[aria-label*="媒体"]',
-        'input[placeholder*="媒体"]',
-        'input[type="search"]',
-        'input'
-      ];
-      for (const sel of inputSelectors) {
-        try {
-          const el = await root.$(sel);
-          if (el) {
-            await el.click({ clickCount: 3 }).catch(() => {});
-            await el.focus().catch(() => {});
-            await el.type(publisher, { delay: 50 }).catch(() => {});
-            await page.keyboard.press('Enter').catch(() => {});
-            console.log(`Typed publisher into selector: ${sel}`);
-            return true;
-          }
-        } catch (e) {
-          // continue
-        }
-      }
-      return false;
+  // メインページ
+  for (const sel of selectors) {
+    const el = page.locator(sel).first();
+    if (await el.count() > 0) {
+      await el.fill(publisher);
+      await page.keyboard.press('Enter');
+      console.log(`Filter applied via main page: ${sel}`);
+      return true;
     }
-
-    // 1) try on main page
-    try {
-      if (await trySelectors(page)) return true;
-    } catch (e) {
-      console.log('trySelectors page failed:', e.message);
-    }
-
-    // 2) try within frames
-    try {
-      const frames = page.frames();
-      console.log('Frame URLs:', frames.map((f) => f.url()).slice(0, 10));
-      for (const f of frames) {
-        try {
-          if (await trySelectors(f)) return true;
-        } catch (e) {
-          // continue
-        }
-      }
-    } catch (e) {
-      console.log('Frame enumeration failed:', e.message);
-    }
-
-    // 3) try clicking filter-like buttons then selecting text
-    try {
-      const candidateButtons = await page.$$('button, div[role="button"], [role="button"]');
-      const buttonTexts = [];
-      for (const btn of candidateButtons) {
-        const text = (await (await btn.getProperty('innerText')).jsonValue() || '').trim();
-        if (text) buttonTexts.push(text);
-        if (/filter|フィルタ|絞り|媒体|publisher/i.test(text)) {
-          await btn.click().catch(() => {});
-          await page.waitForTimeout(700);
-          // look for item containing publisher
-          const handles = await page.$x(`//*[contains(normalize-space(.), "${publisher}")]`);
-          if (handles.length) {
-            await handles[0].click().catch(() => {});
-            await page.waitForTimeout(1200);
-            return true;
-          }
-        }
-      }
-      if (buttonTexts.length) {
-        console.log('Candidate button texts:', buttonTexts.slice(0, 30));
-      }
-    } catch (e) {
-      console.log('Filter candidate button search failed:', e.message);
-    }
-
-    return false;
   }
+
+  // iframe内
+  const frames = page.frames();
+  console.log(`Checking ${frames.length} frames...`);
+  for (const frame of frames) {
+    for (const sel of selectors) {
+      try {
+        const el = frame.locator(sel).first();
+        if (await el.count() > 0) {
+          await el.fill(publisher);
+          await frame.locator('body').press('Enter');
+          console.log(`Filter applied via frame (${frame.url()}): ${sel}`);
+          return true;
+        }
+      } catch (e) {
+        // continue
+      }
+    }
+  }
+
+  console.log(`Filter not found for: ${publisher}`);
+  return false;
+}
+
+async function downloadPublisherPdf(page, publisher) {
+  console.log(`Opening report for ${publisher}...`);
+  await page.goto(REPORT_URL, { waitUntil: 'networkidle', timeout: 60000 });
+  await page.waitForTimeout(5000);
 
   const filterApplied = await applyPublisherFilter(page, publisher);
+
   if (!filterApplied) {
-    console.log(`Filter not applied for ${publisher} — saving debug screenshot/html`);
-    try {
-      const debugPath = path.join('/tmp', `${sanitizeFilename(publisher)}.debug.png`);
-      await page.screenshot({ path: debugPath, fullPage: true });
-      const htmlPath = path.join('/tmp', `${sanitizeFilename(publisher)}.debug.html`);
-      const html = await page.content();
-      fs.writeFileSync(htmlPath, html, 'utf8');
-      console.log(`Saved debug files: ${debugPath}, ${htmlPath}`);
-    } catch (e) {
-      console.log('Failed to write debug files:', e.message);
-    }
+    const debugPath = path.join('/tmp', `${sanitizeFilename(publisher)}.debug.png`);
+    await page.screenshot({ path: debugPath, fullPage: true });
+    const htmlPath = path.join('/tmp', `${sanitizeFilename(publisher)}.debug.html`);
+    fs.writeFileSync(htmlPath, await page.content(), 'utf8');
+    console.log(`Saved debug files: ${debugPath}, ${htmlPath}`);
   } else {
-    console.log(`Filter applied for ${publisher}`);
     await page.waitForTimeout(1200);
   }
-  // =======================================
 
-  // 画面全体をPDF化
   const fileName = `${sanitizeFilename(publisher)}.pdf`;
   const filePath = path.join('/tmp', fileName);
   await page.pdf({ path: filePath, format: 'A4', printBackground: true });
-  await page.close();
   return { filePath, fileName };
 }
 
-async function launchBrowser() {
-  const launchOptions = {
-    headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-  };
-
-  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-    launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-  }
-
-  return puppeteer.launch(launchOptions);
-}
-
 async function main() {
-  const browser = await launchBrowser();
+  const browser = await chromium.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  });
+
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.setViewportSize({ width: 1280, height: 1024 });
+
   try {
     for (const publisher of publishers) {
       try {
-        const { filePath, fileName } = await downloadPublisherPdf(browser, publisher);
+        const { filePath, fileName } = await downloadPublisherPdf(page, publisher);
         await uploadToDrive(filePath, fileName);
         fs.unlinkSync(filePath);
       } catch (error) {
