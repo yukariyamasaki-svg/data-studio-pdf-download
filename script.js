@@ -80,22 +80,41 @@ const publishers = [
   '集英社オンライン'
 ];
 
+// Authentication fallback:
+// 1) Use GOOGLE_SERVICE_ACCOUNT_JSON for service account access.
+// 2) Otherwise use OAuth2 refresh token with GOOGLE_CLIENT_ID,
+//    GOOGLE_CLIENT_SECRET, and GOOGLE_REFRESH_TOKEN.
 async function getAuthClient() {
-  const json = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-  if (!json) {
-    throw new Error('Environment variable GOOGLE_SERVICE_ACCOUNT_JSON is missing');
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
+
+  if (clientId && clientSecret && refreshToken) {
+    console.log('Using OAuth2 refresh token authentication.');
+    const oAuth2Client = new google.auth.OAuth2(clientId, clientSecret);
+    oAuth2Client.setCredentials({ refresh_token: refreshToken });
+    return oAuth2Client;
   }
-  const creds = JSON.parse(json);
-  return new google.auth.GoogleAuth({
-    credentials: creds,
-    scopes: ['https://www.googleapis.com/auth/drive']
-  });
+
+  const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  if (serviceAccountJson) {
+    const creds = JSON.parse(serviceAccountJson);
+    return new google.auth.GoogleAuth({
+      credentials: creds,
+      scopes: ['https://www.googleapis.com/auth/drive']
+    });
+  }
+
+  throw new Error(
+    'Missing Google authentication configuration. Set either GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REFRESH_TOKEN.'
+  );
 }
 
 async function uploadToDrive(filePath, fileName) {
   const auth = await getAuthClient();
   const drive = google.drive({ version: 'v3', auth });
   const response = await drive.files.create({
+    supportsAllDrives: true,
     requestBody: {
       name: fileName,
       parents: [DRIVE_FOLDER_ID],
