@@ -139,6 +139,8 @@ async function downloadPublisherPdf(browser, publisher) {
 
   console.log(`Opening report for ${publisher}...`);
   await page.goto(REPORT_URL, { waitUntil: 'networkidle2', timeout: 60000 });
+  await page.waitForTimeout(5000);
+  console.log(`Page loaded: ${page.url()} (${page.frames().length} frames)`);
 
   // ========== カスタムのフィルタ操作 ==========
   // 汎用フィルタ適用ロジック: 見つかれば publisher を指定して絞り込みます。
@@ -172,23 +174,32 @@ async function downloadPublisherPdf(browser, publisher) {
     // 1) try on main page
     try {
       if (await trySelectors(page)) return true;
-    } catch (e) {}
+    } catch (e) {
+      console.log('trySelectors page failed:', e.message);
+    }
 
     // 2) try within frames
     try {
       const frames = page.frames();
+      console.log('Frame URLs:', frames.map((f) => f.url()).slice(0, 10));
       for (const f of frames) {
         try {
           if (await trySelectors(f)) return true;
-        } catch (e) {}
+        } catch (e) {
+          // continue
+        }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.log('Frame enumeration failed:', e.message);
+    }
 
     // 3) try clicking filter-like buttons then selecting text
     try {
       const candidateButtons = await page.$$('button, div[role="button"], [role="button"]');
+      const buttonTexts = [];
       for (const btn of candidateButtons) {
         const text = (await (await btn.getProperty('innerText')).jsonValue() || '').trim();
+        if (text) buttonTexts.push(text);
         if (/filter|フィルタ|絞り|媒体|publisher/i.test(text)) {
           await btn.click().catch(() => {});
           await page.waitForTimeout(700);
@@ -201,7 +212,12 @@ async function downloadPublisherPdf(browser, publisher) {
           }
         }
       }
-    } catch (e) {}
+      if (buttonTexts.length) {
+        console.log('Candidate button texts:', buttonTexts.slice(0, 30));
+      }
+    } catch (e) {
+      console.log('Filter candidate button search failed:', e.message);
+    }
 
     return false;
   }
