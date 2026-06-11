@@ -141,13 +141,88 @@ async function downloadPublisherPdf(browser, publisher) {
   await page.goto(REPORT_URL, { waitUntil: 'networkidle2', timeout: 60000 });
 
   // ========== カスタムのフィルタ操作 ==========
-  // ここはData StudioレポートのフィルタUIに応じて調整が必要です
-  // 例: テキスト入力フィールドにpublisher名を入れて絞り込む
-  //
-  // await page.click('selector-for-filter-input');
-  // await page.type('selector-for-filter-input', publisher);
-  // await page.keyboard.press('Enter');
-  // await page.waitForTimeout(4000);
+  // 汎用フィルタ適用ロジック: 見つかれば publisher を指定して絞り込みます。
+  async function applyPublisherFilter(page, publisher) {
+    // Helper: try selector on page or within frames
+    async function trySelectors(root) {
+      const inputSelectors = [
+        'input[aria-label*="Publisher"]',
+        'input[placeholder*="Publisher"]',
+        'input[aria-label*="媒体"]',
+        'input[placeholder*="媒体"]',
+        'input[type="search"]',
+        'input'
+      ];
+      for (const sel of inputSelectors) {
+        try {
+          const el = await root.$(sel);
+          if (el) {
+            await el.click({ clickCount: 3 }).catch(() => {});
+            await el.type(publisher, { delay: 50 }).catch(() => {});
+            await root.keyboard.press('Enter').catch(() => {});
+            return true;
+          }
+        } catch (e) {
+          // continue
+        }
+      }
+      return false;
+    }
+
+    // 1) try on main page
+    try {
+      if (await trySelectors(page)) return true;
+    } catch (e) {}
+
+    // 2) try within frames
+    try {
+      const frames = page.frames();
+      for (const f of frames) {
+        try {
+          if (await trySelectors(f)) return true;
+        } catch (e) {}
+      }
+    } catch (e) {}
+
+    // 3) try clicking filter-like buttons then selecting text
+    try {
+      const candidateButtons = await page.$$('button, div[role="button"], [role="button"]');
+      for (const btn of candidateButtons) {
+        const text = (await (await btn.getProperty('innerText')).jsonValue() || '').trim();
+        if (/filter|フィルタ|絞り|媒体|publisher/i.test(text)) {
+          await btn.click().catch(() => {});
+          await page.waitForTimeout(700);
+          // look for item containing publisher
+          const handles = await page.$x(`//*[contains(normalize-space(.), "${publisher}")]`);
+          if (handles.length) {
+            await handles[0].click().catch(() => {});
+            await page.waitForTimeout(1200);
+            return true;
+          }
+        }
+      }
+    } catch (e) {}
+
+    return false;
+  }
+
+  const filterApplied = await applyPublisherFilter(page, publisher);
+  if (!filterApplied) {
+    console.log(`Filter not applied for ${publisher} — saving debug screenshot/html`);
+    try {
+      const debugPath = path.join('/tmp', `${sanitizeFilename(publisher)}.debug.png`);
+      await page.screenshot({ path: debugPath, fullPage: true });
+      const htmlPath = path.join('/tmp', `${sanitizeFilename(publisher)}.debug.html`);
+      const html = await page.content();
+      fs.writeFileSync(htmlPath, html, 'utf8');
+      console.log(`Saved debug files: ${debugPath}, ${htmlPath}`);
+    } catch (e) {
+      console.log('Failed to write debug files:', e.message);
+    }
+  } else {
+    console.log(`Filter applied for ${publisher}`);
+    await page.waitForTimeout(1200);
+  }
   // =======================================
 
   // 画面全体をPDF化
