@@ -160,8 +160,10 @@ async function downloadPublisherPdf(browser, publisher) {
           const el = await root.$(sel);
           if (el) {
             await el.click({ clickCount: 3 }).catch(() => {});
+            await el.focus().catch(() => {});
             await el.type(publisher, { delay: 50 }).catch(() => {});
-            await root.keyboard.press('Enter').catch(() => {});
+            await page.keyboard.press('Enter').catch(() => {});
+            console.log(`Typed publisher into selector: ${sel}`);
             return true;
           }
         } catch (e) {
