@@ -11,7 +11,7 @@ jobs:
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
       PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: 'true'
-      PUPPETEER_EXECUTABLE_PATH: '/usr/bin/chromium-browser'
+      PUPPETEER_EXECUTABLE_PATH: '/usr/bin/google-chrome-stable'
 
     steps:
       - uses: actions/checkout@v5
@@ -24,7 +24,11 @@ jobs:
       - name: Install Chrome
         run: |
           sudo apt-get update
-          sudo apt-get install -y chromium-browser
+          sudo apt-get install -y wget gnupg
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --dearmor -o /usr/share/keyrings/google-linux-signing-keyring.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-linux-signing-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
 
       - name: Install dependencies
         run: npm install
