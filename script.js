@@ -176,8 +176,12 @@ async function applyPublisherFilter(page, publisher) {
 
 async function downloadPublisherPdf(page, publisher) {
   console.log(`Opening report for ${publisher}...`);
-  await page.goto(REPORT_URL, { waitUntil: 'networkidle', timeout: 60000 });
-  await page.waitForTimeout(5000);
+  // Looker Studio dashboards keep background network activity going
+  // indefinitely (polling, streaming charts, etc.), so 'networkidle'
+  // never resolves and always times out. Use 'load' instead, and give
+  // the dashboard extra time afterward to finish rendering.
+  await page.goto(REPORT_URL, { waitUntil: 'load', timeout: 90000 });
+  await page.waitForTimeout(8000);
 
   const filterApplied = await applyPublisherFilter(page, publisher);
 
@@ -209,12 +213,23 @@ async function main() {
 
   try {
     for (const publisher of publishers) {
-      try {
-        const { filePath, fileName } = await downloadPublisherPdf(page, publisher);
-        await uploadToDrive(filePath, fileName);
-        fs.unlinkSync(filePath);
-      } catch (error) {
-        console.error(`Failed for ${publisher}: ${error.message}`);
+      let lastError;
+      let succeeded = false;
+      for (let attempt = 1; attempt <= 2 && !succeeded; attempt++) {
+        try {
+          const { filePath, fileName } = await downloadPublisherPdf(page, publisher);
+          await uploadToDrive(filePath, fileName);
+          fs.unlinkSync(filePath);
+          succeeded = true;
+        } catch (error) {
+          lastError = error;
+          if (attempt < 2) {
+            console.warn(`Attempt ${attempt} failed for ${publisher}: ${error.message}. Retrying...`);
+          }
+        }
+      }
+      if (!succeeded) {
+        console.error(`Failed for ${publisher}: ${lastError.message}`);
       }
     }
   } finally {
