@@ -129,44 +129,58 @@ function sanitizeFilename(name) {
   return name.replace(/[\/\\:*?"<>|]/g, '_');
 }
 
-async function applyPublisherFilter(page, publisher) {
-  // フレームも含めて input を探す
-  const selectors = [
-    'input[aria-label*="Publisher"]',
-    'input[placeholder*="Publisher"]',
-    'input[aria-label*="媒体"]',
-    'input[placeholder*="媒体"]',
-    'input[type="search"]',
-    'input'
-  ];
-
-  // メインページ
-  for (const sel of selectors) {
-    const el = page.locator(sel).first();
-    if (await el.count() > 0) {
-      await el.fill(publisher);
-      await page.keyboard.press('Enter');
-      console.log(`Filter applied via main page: ${sel}`);
-      return true;
-    }
+async function applyPublisherFilterInFrame(frame, publisher) {
+  // The "publisher" widget on this report is a checkbox-list table control
+  // with a search box (placeholder "検索語句を入力"). Typing a name filters
+  // the rows, and hovering a row reveals a "この項目のみ" ("only this item")
+  // link that isolates the filter to that single row.
+  const searchInput = frame.getByPlaceholder('検索語句を入力').first();
+  if (await searchInput.count() === 0) {
+    return false;
   }
 
-  // iframe内
+  await searchInput.click();
+  await searchInput.fill('');
+  await searchInput.fill(publisher);
+  // Let the list re-render after the search/debounce.
+  await frame.waitForTimeout(1000);
+
+  // Use an exact text match so substrings like "PRESIDENT" don't
+  // accidentally match "PRESIDENT(インフォグラフィック用)".
+  const row = frame.getByText(publisher, { exact: true }).first();
+  if (await row.count() === 0) {
+    console.log(`Row not found in publisher list for: ${publisher}`);
+    return false;
+  }
+
+  await row.scrollIntoViewIfNeeded();
+  await row.hover();
+  await frame.waitForTimeout(300);
+
+  const onlyThisItem = frame.getByText('この項目のみ', { exact: true }).first();
+  if (await onlyThisItem.count() === 0) {
+    console.log(`"この項目のみ" link not found for: ${publisher}`);
+    return false;
+  }
+
+  await onlyThisItem.click({ force: true });
+  console.log(`Filter applied via frame (${frame.url()}) for: ${publisher}`);
+  return true;
+}
+
+async function applyPublisherFilter(page, publisher) {
+  // page.frames() already includes the main frame.
   const frames = page.frames();
-  console.log(`Checking ${frames.length} frames...`);
+  console.log(`Checking ${frames.length} frame(s) for publisher filter...`);
+
   for (const frame of frames) {
-    for (const sel of selectors) {
-      try {
-        const el = frame.locator(sel).first();
-        if (await el.count() > 0) {
-          await el.fill(publisher);
-          await frame.locator('body').press('Enter');
-          console.log(`Filter applied via frame (${frame.url()}): ${sel}`);
-          return true;
-        }
-      } catch (e) {
-        // continue
+    try {
+      const applied = await applyPublisherFilterInFrame(frame, publisher);
+      if (applied) {
+        return true;
       }
+    } catch (e) {
+      console.log(`Error applying filter in frame (${frame.url()}): ${e.message}`);
     }
   }
 
