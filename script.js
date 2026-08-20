@@ -12,6 +12,20 @@ const path = require('path');
 const REPORT_URL = 'https://datastudio.google.com/u/0/reporting/6ab590f1-9fad-4bdb-8336-cd145cfbb35f/page/vnXDE';
 const DRIVE_FOLDER_ID = '1xkYmPLURyojCnzujByxWircjY3QWVlUa';
 
+// NOTE: a full 71-publisher run on main (workflow run 32430266287) once
+// succeeded for the first 5 publishers, then every subsequent publisher
+// failed to find the publisher filter control — the debug screenshot
+// showed the control stuck in an "editing" state instead of its normal
+// closed-button state, apparently corrupted by repeatedly page.goto()-ing
+// the same Angular SPA URL on one Page object without a full teardown in
+// between. Fixed by hopping through about:blank before each goto (see
+// downloadPublisherPdf()); a 10-publisher smoke test (test/multi-publisher-run,
+// workflow run covering the same failure point) confirmed the fix — 9/10
+// succeeded, and the one remaining failure ('The Economist(ガリレオ社用)')
+// was a "Row not found in publisher list" (i.e. no matching row appears in
+// the filter's search results at all), a separate, still-open issue to
+// investigate: verify this publisher's exact name against the live Looker
+// Studio report before re-enabling it here.
 const publishers = [
   '36Kr Japan',
   'ALBA Net',
@@ -261,6 +275,17 @@ async function downloadReportPdfViaMenu(page, publisher) {
 
 async function downloadPublisherPdf(page, publisher) {
   console.log(`Opening report for ${publisher}...`);
+  // Data Studio's report page is an Angular SPA. Navigating page.goto() to
+  // the *same* URL repeatedly (once per publisher, on the same Page object)
+  // does not necessarily force a full document teardown/reload — in a long
+  // run (71 publishers) the app's internal widget state eventually gets
+  // corrupted (the publisher filter control gets stuck in an "editing"
+  // state instead of its normal closed-button state) and every subsequent
+  // publisher fails to find button.lego-control, with no way to recover by
+  // just navigating to REPORT_URL again. Forcing a hop through about:blank
+  // first guarantees the previous document (and its in-memory Angular app
+  // state) is fully torn down before the report is loaded fresh.
+  await page.goto('about:blank');
   // Looker Studio dashboards keep background network activity going
   // indefinitely (polling, streaming charts, etc.), so 'networkidle'
   // never resolves and always times out. Use 'load' instead, and give
