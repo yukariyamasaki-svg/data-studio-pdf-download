@@ -3,6 +3,12 @@ const { google } = require('googleapis');
 const fs = require('fs');
 const path = require('path');
 
+// NOTE: the "embed" URL form (/embed/reporting/...) would normally strip the
+// Looker Studio chrome (banner/toolbar/sidebar) from around the report, but
+// this specific report has embedding disabled by the owner ("Can't access
+// report - Viewing in other websites has been disabled by the report
+// owner"), so we use the normal viewer URL and get a clean PDF instead via
+// Data Studio's own "Download report" feature (see downloadReportPdfViaMenu()).
 const REPORT_URL = 'https://datastudio.google.com/u/0/reporting/6ab590f1-9fad-4bdb-8336-cd145cfbb35f/page/vnXDE';
 const DRIVE_FOLDER_ID = '1xkYmPLURyojCnzujByxWircjY3QWVlUa';
 
@@ -130,12 +136,24 @@ function sanitizeFilename(name) {
 }
 
 async function applyPublisherFilterInFrame(frame, publisher) {
-  // The "publisher" widget on this report is a checkbox-list table control
-  // with a search box (placeholder "検索語句を入力"). Typing a name filters
-  // the rows, and hovering a row reveals a "この項目のみ" ("only this item")
-  // link that isolates the filter to that single row.
-  const searchInput = frame.getByPlaceholder('検索語句を入力').first();
-  if (await searchInput.count() === 0) {
+  // The "publisher" control starts out collapsed as a button labeled
+  // "publisher" with a "▼" dropdown arrow (aria-label "Open data control
+  // menu"). Clicking it expands a checkbox-list table with a search box
+  // (class "search-bar"). Typing a name filters the rows, and hovering a
+  // row reveals an "only this item" link (class "only") that isolates the
+  // filter to that single row. The runner renders the UI in English while
+  // local runs render Japanese, so target these structural classes instead
+  // of the localized placeholder/link text.
+  const controlButton = frame.locator('button.lego-control').filter({ hasText: 'publisher' }).first();
+  if (await controlButton.count() === 0) {
+    return false;
+  }
+  await controlButton.click();
+
+  const searchInput = frame.locator('.search-bar input').first();
+  try {
+    await searchInput.waitFor({ state: 'visible', timeout: 5000 });
+  } catch {
     return false;
   }
 
@@ -157,13 +175,21 @@ async function applyPublisherFilterInFrame(frame, publisher) {
   await row.hover();
   await frame.waitForTimeout(300);
 
-  const onlyThisItem = frame.getByText('この項目のみ', { exact: true }).first();
+  const onlyThisItem = frame.locator('span.only').first();
   if (await onlyThisItem.count() === 0) {
-    console.log(`"この項目のみ" link not found for: ${publisher}`);
+    console.log(`"only this item" link not found for: ${publisher}`);
     return false;
   }
 
   await onlyThisItem.click({ force: true });
+
+  // The open dropdown overlay covers the dashboard, so the control button
+  // itself is no longer clickable to close it — press Escape instead. Give
+  // the dashboard time to recompute its charts/tables against the new
+  // filter before the page is captured as a PDF.
+  await frame.locator('body').press('Escape');
+  await frame.waitForTimeout(2000);
+
   console.log(`Filter applied via frame (${frame.url()}) for: ${publisher}`);
   return true;
 }
@@ -188,6 +214,51 @@ async function applyPublisherFilter(page, publisher) {
   return false;
 }
 
+async function downloadReportPdfViaMenu(page, publisher) {
+  // Instead of screenshotting the live dashboard with page.pdf() (which
+  // captures the surrounding chrome — rebranding banner, toolbar, page-list
+  // sidebar — and forces the report table to reflow into a narrower space),
+  // use Data Studio's own "Download report" feature. It renders the report
+  // canvas only, server-side, exactly as the report owner intends. This is
+  // the "共有" (Share) split-button's "More options" (▼) menu, then
+  // "Download report" (Japanese UI: "レポートをダウンロード").
+  const moreOptionsButton = page.locator('button[aria-label="More options"]').first();
+  await moreOptionsButton.waitFor({ state: 'visible', timeout: 15000 });
+  await moreOptionsButton.click();
+  console.log('Clicked "More options" button.');
+
+  await page.screenshot({ path: path.join('/tmp', `${sanitizeFilename(publisher)}.menu-open.debug.png`), fullPage: true });
+
+  // The menu item text differs by locale ("Download report" / "レポートを
+  // ダウンロード"), so match on the underlying menu item structure instead
+  // via role, which Playwright can select on the accessible name across
+  // locales isn't reliable here, so fall back to a regex covering both.
+  const downloadMenuItem = page.getByRole('menuitem', { name: /download report|レポートをダウンロード/i }).first();
+  await downloadMenuItem.waitFor({ state: 'visible', timeout: 10000 });
+  console.log('Found "Download report" menu item.');
+
+  await downloadMenuItem.click();
+  console.log('Clicked "Download report" menu item, waiting for the "Download Report (PDF)" dialog...');
+
+  // Clicking the menu item doesn't download directly — it opens a
+  // confirmation dialog ("Download Report (PDF)", with All Pages/Select
+  // Pages options) that needs its own "Download" button clicked before the
+  // actual file download starts.
+  const confirmDownloadButton = page.locator('button[data-test-id="download-button"]').first();
+  await confirmDownloadButton.waitFor({ state: 'visible', timeout: 10000 });
+  console.log('Found dialog\'s "Download" button.');
+
+  const downloadPromise = page.waitForEvent('download', { timeout: 60000 });
+  await confirmDownloadButton.click();
+  console.log('Clicked dialog\'s "Download" button, waiting for the download to start...');
+
+  const download = await downloadPromise;
+
+  const filePath = path.join('/tmp', `${sanitizeFilename(publisher)}.pdf`);
+  await download.saveAs(filePath);
+  return filePath;
+}
+
 async function downloadPublisherPdf(page, publisher) {
   console.log(`Opening report for ${publisher}...`);
   // Looker Studio dashboards keep background network activity going
@@ -205,13 +276,13 @@ async function downloadPublisherPdf(page, publisher) {
     const htmlPath = path.join('/tmp', `${sanitizeFilename(publisher)}.debug.html`);
     fs.writeFileSync(htmlPath, await page.content(), 'utf8');
     console.log(`Saved debug files: ${debugPath}, ${htmlPath}`);
-  } else {
-    await page.waitForTimeout(1200);
+    throw new Error(`Could not apply publisher filter for: ${publisher}`);
   }
 
+  await page.waitForTimeout(1200);
+
   const fileName = `${sanitizeFilename(publisher)}.pdf`;
-  const filePath = path.join('/tmp', fileName);
-  await page.pdf({ path: filePath, format: 'A4', printBackground: true });
+  const filePath = await downloadReportPdfViaMenu(page, publisher);
   return { filePath, fileName };
 }
 
@@ -221,7 +292,10 @@ async function main() {
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
 
-  const context = await browser.newContext();
+  // acceptDownloads defaults to true in modern Playwright, but set it
+  // explicitly since downloadReportPdfViaMenu() now relies on catching a
+  // 'download' event from Data Studio's "Download report" menu item.
+  const context = await browser.newContext({ acceptDownloads: true });
   const page = await context.newPage();
   await page.setViewportSize({ width: 1280, height: 1024 });
 
@@ -233,7 +307,9 @@ async function main() {
         try {
           const { filePath, fileName } = await downloadPublisherPdf(page, publisher);
           await uploadToDrive(filePath, fileName);
-          fs.unlinkSync(filePath);
+          if (!process.env.KEEP_LOCAL_PDF) {
+            fs.unlinkSync(filePath);
+          }
           succeeded = true;
         } catch (error) {
           lastError = error;

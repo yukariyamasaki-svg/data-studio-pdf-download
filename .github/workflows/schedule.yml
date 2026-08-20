@@ -32,6 +32,7 @@ jobs:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          KEEP_LOCAL_PDF: 'true'
         run: npm start
 
       - name: Upload debug artifacts
@@ -40,4 +41,12 @@ jobs:
         with:
           name: data-studio-debug
           path: /tmp/*.debug.*
+          if-no-files-found: ignore
+
+      - name: Upload generated PDFs (temporary, for manual verification)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: data-studio-pdfs
+          path: /tmp/*.pdf
           if-no-files-found: ignore
