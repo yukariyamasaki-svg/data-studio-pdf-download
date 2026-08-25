@@ -4,7 +4,7 @@
 Looker Studio（旧Data Studio）の媒体（publisher）別レポートページをPlaywrightでPDF化し、Google Driveにアップロードするスクリプト。GitHub Actions（`.github/workflows/schedule.yml`）で毎月3日00:00 UTCに自動実行、`workflow_dispatch`で手動実行も可能。
 
 ## 現在の状態（2026-08-25 最終更新）
-- **13媒体の「Row not found」を修正**（詳細は下記「2026-08-25」の項）。目視での「半角スペース＋全角括弧」推測が誤りだったことを確認し、実際のDOM表記（スペースなし）に合わせて`publishers`配列を修正。ローカルで`debug-remaining-publishers.js`（新規追加）を実行し、13件全てが`aria-label`のテキストと文字コード単位で完全一致することを確認済み。まだGitHub Actions上での本番実行での確認は未実施（次のステップ）。
+- **13媒体の「Row not found」を修正し、本番実行で確認済み**。目視での「半角スペース＋全角括弧」推測が誤りだったことを確認し、実際のDOM表記（スペースなし）に合わせて`publishers`配列を修正。`test/fix-13-publisher-names`ブランチで全68媒体の本番同条件実行（run `32795175768`）を行い、**68/68成功・0失敗**（アップロード68件確認）。`main`にマージ・push済み（`86d3539`）。長らく続いていた表記ズレ問題はこれで解消。
 
 ## 現在の状態（2026-08-20 最終更新）
 - ローカル`main`ブランチの履歴がリモート`origin/main`に一度も繋がっていない状態を発見・修正（`git update-ref` + `git branch --set-upstream-to`で接続）。以降のコミットは`5082a4c`以降、履歴として正しく積まれている。
@@ -28,12 +28,11 @@ Looker Studio（旧Data Studio）の媒体（publisher）別レポートペー�
   - 失敗した17媒体：The Economist(ガリレオ社用) / NewsPicks Selection(インフォグラフィック用) / ONE CAREER PLUS / nobico(のびこ)新フィード / PHPオンライン(インフォグラフィック用) / THE GOLD ONLINE(インフォグラフィック用) / Branc(ブラン) / Harvard Health(ガリレオ社用) / The New York Times Opinion(ガリレオ社用) / Worldcrunch(ガリレオ社用) / コルク / ダイヤモンド・プレミアム(インフォグラフィック用) / 婦人画報&美しいキモノプレミアム / PRESIDENT(インフォグラフィック用) / プレジデントオンラインアカデミー(インフォグラフィック用) / 現代ビジネスプレミアム(新フィード版) / 集英社オンライン(フィード版)
 
 ## 次回セッションでやること
-1. **（最優先・進行中）** 13媒体の修正をGitHub Actions本番実行で確認する。テストブランチにpushし`workflow_dispatch`で実行→全68媒体成功を確認できたら`main`にマージする。
-2. 新規発見した未登録表記（`PRESIDENT（旧CMS入稿用）`、`集英社オンライン（金鍵記事 CMS版）`、`集英社オンライン（金鍵記事 フィード版）`）を`publishers`配列に追加するかどうかを判断する（ユーザー確認が必要——これらは既存の媒体名の新しいバリエーションと思われるが、担当者に確認したほうが確実）。
-3. コルク／ONE CAREER PLUS／THE GOLD ONLINE(インフォグラフィック用)の3媒体は、今回も一覧に出現せず（`aria-label`ベースの調査でも0件）、掲載期間中の記事が0件のため選択肢自体に出てこないと再確認。無理に有効化せず、`publishers`配列でコメントアウトしたまま様子を見る（月が変われば出現するかもしれない）。
-4. デバッグ用に追加した一時的なCIステップ（`Upload debug artifacts`, `Upload generated PDFs`）を本番運用時にどう扱うか（残す/外す）を判断する
-5. `test/multi-publisher-run`・`test/single-publisher-run`・`test/list-publishers`ブランチは検証用途を終えたら削除するかどうか判断する
-6. `smartnews/sn-prototyping`のPR #2331（別プロジェクト、Knativeベースの重複実装）をrevertする作業がまだ残っている（ユーザー確認済み・未実施）
+1. 新規発見した未登録表記（`PRESIDENT（旧CMS入稿用）`、`集英社オンライン（金鍵記事 CMS版）`、`集英社オンライン（金鍵記事 フィード版）`）を`publishers`配列に追加するかどうかを判断する（ユーザー確認が必要——これらは既存の媒体名の新しいバリエーションと思われるが、担当者に確認したほうが確実）。
+2. コルク／ONE CAREER PLUS／THE GOLD ONLINE(インフォグラフィック用)の3媒体は、今回も一覧に出現せず（`aria-label`ベースの調査でも0件）、掲載期間中の記事が0件のため選択肢自体に出てこないと再確認。無理に有効化せず、`publishers`配列でコメントアウトしたまま様子を見る（月が変われば出現するかもしれない）。
+3. デバッグ用に追加した一時的なCIステップ（`Upload debug artifacts`, `Upload generated PDFs`）を本番運用時にどう扱うか（残す/外す）を判断する
+4. `test/multi-publisher-run`・`test/single-publisher-run`・`test/list-publishers`・`test/fix-13-publisher-names`ブランチは検証用途を終えたので削除するかどうか判断する（いずれもmainにマージ済み）
+5. `smartnews/sn-prototyping`のPR #2331（別プロジェクト、Knativeベースの重複実装）をrevertする作業がまだ残っている（ユーザー確認済み・未実施）
 
 ## ローカル実行について
 - ローカルで`npm start`するにはGoogle OAuth環境変数（`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`）が必要。未設定・`node_modules`も未インストールの状態のため、実行確認は基本的にGitHub Actions手動実行（`gh workflow run schedule.yml --ref <branch>`）を優先する。
