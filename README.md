@@ -55,3 +55,4 @@ Webブラウザから実行することもできます。
 ## 関連プロジェクト
 
 - 社内の[jp-mb-scripts](https://github.com/smartnews/jp-mb-scripts)リポジトリにある`monthly-report-download`は、同じ「Looker Studioレポートのダウンロード」を目的とした**別の・個人PCで手動実行するスクリプト**です（対象媒体数や運用方法が異なる、このリポジトリとは別物）。
+- このスクリプト自体のコードは`jp-mb-scripts`内の`data-studio-pdf-download`フォルダにも取り込まれているが、`jp-mb-scripts`は手動実行スクリプト置き場という運用方針のため、そちらではGitHub Actionsによる自動実行は行わない。**自動実行（GitHub Actions・月次スケジュール）はこの個人リポジトリ側でのみ運用する。**
