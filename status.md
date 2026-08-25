@@ -3,6 +3,14 @@
 ## 目的
 Looker Studio（旧Data Studio）の媒体（publisher）別レポートページをPlaywrightでPDF化し、Google Driveにアップロードするスクリプト。GitHub Actions（`.github/workflows/schedule.yml`）で毎月3日00:00 UTCに自動実行、`workflow_dispatch`で手動実行も可能。
 
+## 現在の状態（2026-08-25 続き4：DRIVE_FOLDER_ID不一致バグを発見・修正、GAS①/②とのエンドツーエンド接続を確認）
+- `TEST_PUBLISHERS`環境変数（カンマ区切りで媒体名を指定、`workflow_dispatch`の`test_publishers`入力にも対応）を新規追加。後続のBox転送・ダブルチェックの動作確認を、全68媒体を毎回処理せず一部の媒体だけに絞って行えるようにした。
+- 上記の検証中、`script.js`の`DRIVE_FOLDER_ID`（`1xkYmPLURyojCnzujByxWircjY3QWVlUa`）が、GAS①（自動実行_リネームとBox転送）が実際に読んでいる`GOOGLE_FOLDER_ID`（`1UK3wc7RJ-Mw69SxWJJ5NHNTUwVMxyea2`）と一致していないことが判明。**以前のセッションで「一致している」と確認済みとされていたが、それは誤りだった**。このため2026-08-24・25に行った複数回の本番相当実行は、GAS①の実行ログ上は正常終了していても実際には1件も処理されておらず、Box転送・ダブルチェックまで一度も到達していなかった（サイレント障害）。
+- `DRIVE_FOLDER_ID`をGAS①の`GOOGLE_FOLDER_ID`に合わせて修正（コミット`8cc8255`、push済み）。`TEST_PUBLISHERS=36Kr Japan`でエンドツーエンド再検証し、Drive→GAS①リネーム→GAS①Box転送→GAS②ダブルチェックまで全ステップ成功をユーザー自身のブラウザ・Box・スプレッドシート確認で確認済み。
+- GAS①・GAS②はいずれも時間主導トリガーで完全自動実行されることを確認（ユーザー確認済み）。READMEの「アップロード完了後の手順」を「手動実行不要」に更新（コミット`03100b2`、push済み）。
+- テストで生じた成果物のクリーンアップも実施：誤フォルダ内の408件のPDFのうち407件を削除（1件は「このアプリに書き込み権限がない」エラーで削除不可、手動対応待ち）、Boxのテストファイルはユーザーが手動削除、突合スプレッドシート（`1MWD6q1-QM39rZUB_Ds6eTTJODpY__Fxx8RihgonRvx4`）のテスト行3件は新規「アーカイブ」シートへ移動（削除ではなく保存）。
+- **未検証**：`TEST_PUBLISHERS`を外した全68媒体でのフル本番実行は、この`DRIVE_FOLDER_ID`修正後にまだ実施していない。次回優先で確認する。
+
 ## 現在の状態（2026-08-25 続き：GAS後続処理の自動統合は断念、Drive経由設計を維持）
 - GASで手動運用している「名前変更／Box転送仕分け」「ダブルチェック」をこの自動化に統合できないか検討し、`test/box-integration`ブランチでNode.jsからBoxへ直接アップロードする実装（Box Service Account／Client Credentials Grant認証、`googleapis`/Google Drive関連コード削除、`pdf-parse`でのPDF直接テキスト抽出）まで作成した。
 - 実装後、Box側でCustom App（Client Credentials Grant）を新規作成したところ「承認を保留中」の状態になり、Box管理者による承認（Custom Apps Managerでの許可）が必要と判明。既存のGAS①・GAS②が使っているBoxアプリは既に承認済みで動いているため、**新規アプリの管理者承認というハードルだけがこの統合の障害**だった。
@@ -48,6 +56,7 @@ Looker Studio（旧Data Studio）の媒体（publisher）別レポートペー�
 - 新規に認証したい場合は`npm run get-refresh-token`でブラウザ経由の認証フローからrefresh tokenを取得できる（`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`は別途必要）。
 
 ## 更新履歴
+- 2026-08-25（続き4）: `TEST_PUBLISHERS`フィルターを追加。検証中に`DRIVE_FOLDER_ID`がGAS①の`GOOGLE_FOLDER_ID`と一致していない（別の未使用フォルダを指していた）バグを発見・修正（`8cc8255`）、36Kr Japanでエンドツーエンド再検証。GAS①/②が完全自動（時間主導トリガー）であることを確認しREADME更新（`03100b2`）。誤フォルダのPDF407件削除、Boxテストファイル削除、突合スプレッドシートのテスト行をアーカイブシートへ移動。
 - 2026-08-25（続き）: ユーザー確認のうえ、新規発見した3表記を`publishers`配列に追加し、デバッグ用CIステップは残す方針で決定。検証用の4ブランチ（`test/multi-publisher-run`・`test/single-publisher-run`・`test/list-publishers`・`test/fix-13-publisher-names`）をリモート・ローカルとも削除。`smartnews/sn-prototyping`のPR #2331もrevert済み（PR #2337、squash-merge済み）。
 - 2026-08-25: `list-publishers.js`の全件スクロール方式が最新実行でエラー（「Could not open the publisher control in any frame」）になったため、代わりに13媒体それぞれの短い部分文字列（例:「PRESIDENT」）で検索し、該当行の`aria-label`と文字コードをダンプする`debug-remaining-publishers.js`を新規作成してローカルで実行。結果、13媒体全ての実際の表記に**括弧の直前のスペースが一切存在しない**ことが判明（例: 実際は`The Economist（ガリレオ社用）`で、`3ea51ab`で入れた半角スペースは誤り）。`publishers`配列から該当スペースを削除する修正を実施し、ローカルで13件全てが`aria-label`と文字コード単位で完全一致することを確認。また調査中に、`publishers`配列に未登録の新規表記（`PRESIDENT（旧CMS入稿用）`、`集英社オンライン（金鍵記事 CMS版）`、`集英社オンライン（金鍵記事 フィード版）`）がフィルター候補に存在することを発見——これらは今回の13媒体修正の対象外（配列に元から無かったため「Row not found」にもならず、単に収集されていない）。追加するかどうかは要判断（次回セッション）。
 - 2026-08-21: 17媒体のうち14媒体について、`list-publishers.js`（`test/list-publishers`ブランチ、publisherコントロールを検索せずに開いてスクリーンショット/HTMLを保存する調査用スクリプト、後に`main`にマージ済みコミット`eb60f6a`）でLooker Studio上の実際の表記を目視確認し、`publishers`配列を修正（コミット`3ea51ab`）。修正内容は主に「半角スペース＋全角括弧」（例: `The Economist(ガリレオ社用)` → `The Economist （ガリレオ社用）`）と「全角&」（婦人画報＆美しいキモノプレミアム）。残り3媒体（コルク/ONE CAREER PLUS/THE GOLD ONLINE(インフォグラフィック用)）は`list-publishers.js`を2回実行してもリストに出現せず、当該期間に記事がないためフィルター選択肢自体に存在しないと推測し、`publishers`配列でコメントアウト（68媒体構成に）。
