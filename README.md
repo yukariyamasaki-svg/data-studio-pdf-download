@@ -54,10 +54,9 @@ Webブラウザからの場合は、「Run workflow」ダイアログ内の`test
 
 ## アップロード完了後の手順
 
-Google Driveへのアップロードが終わったら、以下の順にGoogle Apps Script（GAS）側の処理を実行してBox転送・ダブルチェックまで完了させてください（このワークフローの範囲外、手動対応）。
+Google Driveへのアップロードが終わったあとの処理（名前変更・Box転送仕分け・ダブルチェック）は、[GAS①（名前変更/Box転送仕分け）](https://script.google.com/home/projects/1KNzq3wKy8DSOhFXCcPnjwf5krWc5dZR1LCGzRV8G4CSZnmftf8Uc7-vI/edit)の`自動実行_リネームとBox転送`と、[GAS②（ダブルチェック）](https://script.google.com/home/projects/1RbTEF52nZDsHUrH3P8CUxk_kQMriDd70d9ZDB9J9Qr7kqkxFJcTaatWp/edit?hl=ja)の`startReconcile`が、それぞれ時間主導トリガーで自動実行されるため、**手動での実行は不要**です。
 
-1. [GAS①（名前変更/Box転送仕分け）](https://script.google.com/home/projects/1KNzq3wKy8DSOhFXCcPnjwf5krWc5dZR1LCGzRV8G4CSZnmftf8Uc7-vI/edit)を開き、対応するスプレッドシートのカスタムメニューから、まず「ステップ1_名前変更のみ実行」を実行し、結果を確認したうえで「ステップ2_Box転送仕分けを実行」を実行してください。
-2. 続いて[GAS②（ダブルチェック）](https://script.google.com/home/projects/1RbTEF52nZDsHUrH3P8CUxk_kQMriDd70d9ZDB9J9Qr7kqkxFJcTaatWp/edit?hl=ja)のスクリプトエディタで`startReconcile`関数を実行してください。Box側のフォルダ名とファイル内容の整合性チェックが行われます。
+うまく動いていない場合の手動確認用に、それぞれのスクリプトエディタから直接関数を実行することもできます（GAS①は`自動実行_リネームとBox転送`、GAS②は`startReconcile`）。
 
 ## トラブルシューティング
 
