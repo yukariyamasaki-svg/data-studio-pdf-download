@@ -97,6 +97,7 @@ const publishers = [
   '販促会議',
   '日刊ゲンダイDIGITAL',
   'PRESIDENT（インフォグラフィック用）', // fixed: no space before full-width paren
+  'PRESIDENT（旧CMS入稿用）', // newly discovered variant, added 2026-08-25
   'PRESIDENT',
   'プレジデントオンラインアカデミー（インフォグラフィック用）', // fixed: no space before full-width paren
   'プレジデントオンラインアカデミー',
@@ -107,6 +108,8 @@ const publishers = [
   '週刊文春 電子版',
   '総合情報誌「選択」',
   '集英社オンライン（フィード版）', // fixed: no space before full-width paren
+  '集英社オンライン（金鍵記事 CMS版）', // newly discovered variant, added 2026-08-25
+  '集英社オンライン（金鍵記事 フィード版）', // newly discovered variant, added 2026-08-25
   '集英社オンライン'
 ];
 

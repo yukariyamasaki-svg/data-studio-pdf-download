@@ -28,17 +28,21 @@ Looker Studio（旧Data Studio）の媒体（publisher）別レポートペー�
   - 失敗した17媒体：The Economist(ガリレオ社用) / NewsPicks Selection(インフォグラフィック用) / ONE CAREER PLUS / nobico(のびこ)新フィード / PHPオンライン(インフォグラフィック用) / THE GOLD ONLINE(インフォグラフィック用) / Branc(ブラン) / Harvard Health(ガリレオ社用) / The New York Times Opinion(ガリレオ社用) / Worldcrunch(ガリレオ社用) / コルク / ダイヤモンド・プレミアム(インフォグラフィック用) / 婦人画報&美しいキモノプレミアム / PRESIDENT(インフォグラフィック用) / プレジデントオンラインアカデミー(インフォグラフィック用) / 現代ビジネスプレミアム(新フィード版) / 集英社オンライン(フィード版)
 
 ## 次回セッションでやること
-1. 新規発見した未登録表記（`PRESIDENT（旧CMS入稿用）`、`集英社オンライン（金鍵記事 CMS版）`、`集英社オンライン（金鍵記事 フィード版）`）を`publishers`配列に追加するかどうかを判断する（ユーザー確認が必要——これらは既存の媒体名の新しいバリエーションと思われるが、担当者に確認したほうが確実）。
-2. コルク／ONE CAREER PLUS／THE GOLD ONLINE(インフォグラフィック用)の3媒体は、今回も一覧に出現せず（`aria-label`ベースの調査でも0件）、掲載期間中の記事が0件のため選択肢自体に出てこないと再確認。無理に有効化せず、`publishers`配列でコメントアウトしたまま様子を見る（月が変われば出現するかもしれない）。
-3. デバッグ用に追加した一時的なCIステップ（`Upload debug artifacts`, `Upload generated PDFs`）を本番運用時にどう扱うか（残す/外す）を判断する
-4. `test/multi-publisher-run`・`test/single-publisher-run`・`test/list-publishers`・`test/fix-13-publisher-names`ブランチは検証用途を終えたので削除するかどうか判断する（いずれもmainにマージ済み）
-5. `smartnews/sn-prototyping`のPR #2331（別プロジェクト、Knativeベースの重複実装）をrevertする作業がまだ残っている（ユーザー確認済み・未実施）
+1. コルク／ONE CAREER PLUS／THE GOLD ONLINE(インフォグラフィック用)の3媒体は、今回も一覧に出現せず（`aria-label`ベースの調査でも0件）、掲載期間中の記事が0件のため選択肢自体に出てこないと再確認。無理に有効化せず、`publishers`配列でコメントアウトしたまま様子を見る（月が変われば出現するかもしれない）。
+2. 新規追加した3表記（`PRESIDENT（旧CMS入稿用）`、`集英社オンライン（金鍵記事 CMS版）`、`集英社オンライン（金鍵記事 フィード版）`）が次回本番実行で正しく成功するか確認する。
+
+## 完了済み（2026-08-25）
+- 新規発見した未登録表記3件（`PRESIDENT（旧CMS入稿用）`、`集英社オンライン（金鍵記事 CMS版）`、`集英社オンライン（金鍵記事 フィード版）`）をユーザー確認のうえ`publishers`配列に追加。
+- デバッグ用CIステップ（`Upload debug artifacts`, `Upload generated PDFs`）はユーザー確認のうえ残す方針で決定（本番運用がまだ間もないため、失敗時の切り分け用に維持）。
+- 検証用途を終えた`test/multi-publisher-run`・`test/single-publisher-run`・`test/list-publishers`・`test/fix-13-publisher-names`ブランチを削除済み（いずれもmainに反映済みの内容だったため安全に削除）。
+- `smartnews/sn-prototyping`のPR #2331（別プロジェクト、Knativeベースの重複実装）をrevert済み（PR #2337、squash-merge済み）。
 
 ## ローカル実行について
 - ローカルで`npm start`するにはGoogle OAuth環境変数（`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`）が必要。未設定・`node_modules`も未インストールの状態のため、実行確認は基本的にGitHub Actions手動実行（`gh workflow run schedule.yml --ref <branch>`）を優先する。
 - 新規に認証したい場合は`npm run get-refresh-token`でブラウザ経由の認証フローからrefresh tokenを取得できる（`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`は別途必要）。
 
 ## 更新履歴
+- 2026-08-25（続き）: ユーザー確認のうえ、新規発見した3表記を`publishers`配列に追加し、デバッグ用CIステップは残す方針で決定。検証用の4ブランチ（`test/multi-publisher-run`・`test/single-publisher-run`・`test/list-publishers`・`test/fix-13-publisher-names`）をリモート・ローカルとも削除。`smartnews/sn-prototyping`のPR #2331もrevert済み（PR #2337、squash-merge済み）。
 - 2026-08-25: `list-publishers.js`の全件スクロール方式が最新実行でエラー（「Could not open the publisher control in any frame」）になったため、代わりに13媒体それぞれの短い部分文字列（例:「PRESIDENT」）で検索し、該当行の`aria-label`と文字コードをダンプする`debug-remaining-publishers.js`を新規作成してローカルで実行。結果、13媒体全ての実際の表記に**括弧の直前のスペースが一切存在しない**ことが判明（例: 実際は`The Economist（ガリレオ社用）`で、`3ea51ab`で入れた半角スペースは誤り）。`publishers`配列から該当スペースを削除する修正を実施し、ローカルで13件全てが`aria-label`と文字コード単位で完全一致することを確認。また調査中に、`publishers`配列に未登録の新規表記（`PRESIDENT（旧CMS入稿用）`、`集英社オンライン（金鍵記事 CMS版）`、`集英社オンライン（金鍵記事 フィード版）`）がフィルター候補に存在することを発見——これらは今回の13媒体修正の対象外（配列に元から無かったため「Row not found」にもならず、単に収集されていない）。追加するかどうかは要判断（次回セッション）。
 - 2026-08-21: 17媒体のうち14媒体について、`list-publishers.js`（`test/list-publishers`ブランチ、publisherコントロールを検索せずに開いてスクリーンショット/HTMLを保存する調査用スクリプト、後に`main`にマージ済みコミット`eb60f6a`）でLooker Studio上の実際の表記を目視確認し、`publishers`配列を修正（コミット`3ea51ab`）。修正内容は主に「半角スペース＋全角括弧」（例: `The Economist(ガリレオ社用)` → `The Economist （ガリレオ社用）`）と「全角&」（婦人画報＆美しいキモノプレミアム）。残り3媒体（コルク/ONE CAREER PLUS/THE GOLD ONLINE(インフォグラフィック用)）は`list-publishers.js`を2回実行してもリストに出現せず、当該期間に記事がないためフィルター選択肢自体に存在しないと推測し、`publishers`配列でコメントアウト（68媒体構成に）。
   - **修正後に全68媒体で本番実行 → 55/68成功、13媒体が依然として「Row not found」で失敗**。失敗した13媒体は全て今回スペース・括弧を修正したはずの媒体（婦人画報＆美しいキモノプレミアムのみ成功、他13件は再現）。目視で読み取った「半角スペース」が実際には全角スペースや他の不可視文字だった可能性が濃厚（画像から文字コードを正確に判別できないため）。この点の再調査が次回最優先課題。`getByText(..., {exact:true})`という完全一致方式そのものの脆さも一因なので、次回は正規化した部分一致、またはDOM構造（`aria-label`属性など）を使った照合方式への切り替えも検討する。
