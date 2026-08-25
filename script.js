@@ -23,39 +23,38 @@ const DRIVE_FOLDER_ID = '1xkYmPLURyojCnzujByxWircjY3QWVlUa';
 //
 // After that fix, a full 71-publisher run (2026-08-21) got 54/71 right and
 // 17 failed with "Row not found in publisher list" (i.e. the search box
-// found zero matching rows for the exact string below). Investigated via
-// list-publishers.js (test/list-publishers branch), which opens the same
-// control without typing into the search box, so the full unfiltered list
-// renders. That revealed the live report's actual wording differs from
-// what was in this array: most parenthesized suffixes are preceded by a
-// half-width space and use full-width parentheses — e.g. the array had
-// 'The Economist(ガリレオ社用)' but the report has
-// 'The Economist （ガリレオ社用）' (note the space before the full-width
-// "（"). 14 of the 17 have been corrected below (marked with a trailing
-// comment). The remaining 3 — 'ONE CAREER PLUS', 'THE GOLD ONLINE(インフォ
-// グラフィック用)', and 'コルク' — did not appear in any of the
-// list-publishers.js screenshots taken (possibly further down the list
-// than we scrolled, or simply have too few articles this period to
-// appear); investigate further before re-enabling them.
+// found zero matching rows for the exact string below). A first fix attempt
+// (guessing "half-width space + full-width parens" from eyeballing
+// screenshots) corrected 14 of the 17, but the remaining 13 kept failing —
+// the guess was wrong: eyeballing added a half-width space before the
+// full-width "（" that isn't actually there. Confirmed via
+// debug-remaining-publishers.js, which reads each row's exact text from its
+// `aria-label` attribute (not OCR'd from a screenshot): the real text has
+// no space at all before the full-width paren, e.g. 'The Economist（ガリレ
+// オ社用）', not 'The Economist （ガリレオ社用）'. All 13 are fixed below
+// by removing that space. The remaining 3 — 'ONE CAREER PLUS', 'THE GOLD
+// ONLINE(インフォグラフィック用)', and 'コルク' — genuinely have zero rows
+// in the current publisher list (confirmed the same way, not a text
+// mismatch), so they stay disabled until they have data again.
 const publishers = [
   '36Kr Japan',
   'ALBA Net',
   'Full-Count',
   'Bloomberg',
   'Fortune',
-  'The Economist （ガリレオ社用）', // was: 'The Economist(ガリレオ社用)'
+  'The Economist（ガリレオ社用）', // fixed: no space before full-width paren (was: 'The Economist （ガリレオ社用）')
   'The Washington Post',
   'KAI-YOU Premium',
   'MIT Technology Review',
   'MONOQLO',
   'Myゴルフダイジェスト',
-  'NewsPicks Selection （インフォグラフィック用）', // was: 'NewsPicks Selection(インフォグラフィック用)'
+  'NewsPicks Selection（インフォグラフィック用）', // fixed: no space before full-width paren
   'NewsPicks Selection',
   'NumberPREMIER',
   // 'ONE CAREER PLUS', // TEMPORARILY DISABLED: not found in list-publishers.js output, needs investigation
-  'nobico （のびこ）新フィード', // was: 'nobico(のびこ)新フィード'
+  'nobico（のびこ）新フィード', // fixed: no space before full-width paren
   'nobico',
-  'PHPオンライン （インフォグラフィック用）', // was: 'PHPオンライン(インフォグラフィック用)'
+  'PHPオンライン（インフォグラフィック用）', // fixed: no space before full-width paren
   'PHPオンライン',
   'THE21オンライン',
   'WEB Voice',
@@ -73,12 +72,12 @@ const publishers = [
   'YOUTRUST',
   'ほんのれん',
   'みんかぶプレミアム',
-  'Branc （ブラン）', // was: 'Branc(ブラン)'
+  'Branc（ブラン）', // fixed: no space before full-width paren
   'レスポンス',
   '決算が読めるようになるノート',
-  'Harvard Health （ガリレオ社用）', // was: 'Harvard Health(ガリレオ社用)'
-  'The New York Times Opinion （ガリレオ社用）', // was: 'The New York Times Opinion(ガリレオ社用)'
-  'Worldcrunch （ガリレオ社用）', // was: 'Worldcrunch(ガリレオ社用)'
+  'Harvard Health（ガリレオ社用）', // fixed: no space before full-width paren
+  'The New York Times Opinion（ガリレオ社用）', // fixed: no space before full-width paren
+  'Worldcrunch（ガリレオ社用）', // fixed: no space before full-width paren
   // 'コルク', // TEMPORARILY DISABLED: not found in list-publishers.js output, needs investigation
   'SLUGGER',
   'サッカーダイジェストWeb',
@@ -86,7 +85,7 @@ const publishers = [
   'The Japan Times Alpha',
   'The Japan Times Alpha（英語学習法）',
   'ジャパンタイムズ出版',
-  'ダイヤモンド・プレミアム （インフォグラフィック用）', // was: 'ダイヤモンド・プレミアム(インフォグラフィック用)'
+  'ダイヤモンド・プレミアム（インフォグラフィック用）', // fixed: no space before full-width paren
   'ダイヤモンド・プレミアム',
   'バロンズ・ダイジェスト',
   'ビズリーチ',
@@ -97,17 +96,17 @@ const publishers = [
   '広報会議',
   '販促会議',
   '日刊ゲンダイDIGITAL',
-  'PRESIDENT （インフォグラフィック用）', // was: 'PRESIDENT(インフォグラフィック用)'
+  'PRESIDENT（インフォグラフィック用）', // fixed: no space before full-width paren
   'PRESIDENT',
-  'プレジデントオンラインアカデミー （インフォグラフィック用）', // was: 'プレジデントオンラインアカデミー(インフォグラフィック用)'
+  'プレジデントオンラインアカデミー（インフォグラフィック用）', // fixed: no space before full-width paren
   'プレジデントオンラインアカデミー',
   '毎日新聞「経済プレミア」',
   '週刊エコノミスト(フィード版)',
-  '現代ビジネスプレミアム （新フィード版）', // was: '現代ビジネスプレミアム(新フィード版)'
+  '現代ビジネスプレミアム（新フィード版）', // fixed: no space before full-width paren
   '週刊ベースボールONLINE',
   '週刊文春 電子版',
   '総合情報誌「選択」',
-  '集英社オンライン （フィード版）', // was: '集英社オンライン(フィード版)'
+  '集英社オンライン（フィード版）', // fixed: no space before full-width paren
   '集英社オンライン'
 ];
 
