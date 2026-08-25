@@ -42,6 +42,13 @@ Webブラウザから実行することもできます。
 - ログの最後の方に `Failed for ...` という行が**一つもない**ら全媒体成功です。
 - 一部の媒体だけ `Failed for 媒体名: ...` と出ていたら、その媒体だけ失敗しています（他は成功しています）。ワークフロー自体は失敗表示（赤い×）になりますが、実際にどこまで成功したかはログで確認してください。
 
+## アップロード完了後の手順
+
+Google Driveへのアップロードが終わったら、以下の順にGoogle Apps Script（GAS）側の処理を実行してBox転送・ダブルチェックまで完了させてください（このワークフローの範囲外、手動対応）。
+
+1. [GAS①（名前変更/Box転送仕分け）](https://script.google.com/home/projects/1KNzq3wKy8DSOhFXCcPnjwf5krWc5dZR1LCGzRV8G4CSZnmftf8Uc7-vI/edit)を開き、対応するスプレッドシートのカスタムメニューから、まず「ステップ1_名前変更のみ実行」を実行し、結果を確認したうえで「ステップ2_Box転送仕分けを実行」を実行してください。
+2. 続いて[GAS②（ダブルチェック）](https://script.google.com/home/projects/1RbTEF52nZDsHUrH3P8CUxk_kQMriDd70d9ZDB9J9Qr7kqkxFJcTaatWp/edit?hl=ja)のスクリプトエディタで`startReconcile`関数を実行してください。Box側のフォルダ名とファイル内容の整合性チェックが行われます。
+
 ## トラブルシューティング
 
 | 症状 | 対処 |
