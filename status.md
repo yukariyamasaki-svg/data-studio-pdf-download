@@ -3,6 +3,12 @@
 ## 目的
 Looker Studio（旧Data Studio）の媒体（publisher）別レポートページをPlaywrightでPDF化し、Google Driveにアップロードするスクリプト。GitHub Actions（`.github/workflows/schedule.yml`）で毎月3日00:00 UTCに自動実行、`workflow_dispatch`で手動実行も可能。
 
+## 現在の状態（2026-08-25 続き：GAS後続処理の自動統合は断念、Drive経由設計を維持）
+- GASで手動運用している「名前変更／Box転送仕分け」「ダブルチェック」をこの自動化に統合できないか検討し、`test/box-integration`ブランチでNode.jsからBoxへ直接アップロードする実装（Box Service Account／Client Credentials Grant認証、`googleapis`/Google Drive関連コード削除、`pdf-parse`でのPDF直接テキスト抽出）まで作成した。
+- 実装後、Box側でCustom App（Client Credentials Grant）を新規作成したところ「承認を保留中」の状態になり、Box管理者による承認（Custom Apps Managerでの許可）が必要と判明。既存のGAS①・GAS②が使っているBoxアプリは既に承認済みで動いているため、**新規アプリの管理者承認というハードルだけがこの統合の障害**だった。
+- ユーザー判断により、この統合は見送り、**元のGoogle Drive経由の設計（GitHub ActionsはDriveアップロードのみ、Box転送は既存GAS①が手動トリガーで担当）に戻す**ことを決定。`test/box-integration`ブランチ（未push、ローカルのみ）は削除済み。`main`には一切変更なし。
+- 次回また統合を検討する場合は、まず社内のBox管理者に新規Custom Appの承認を先に依頼してから実装に着手するとスムーズ（今回は実装完了後に承認待ちが発覚し手戻りになった）。
+
 ## 現在の状態（2026-08-25 最終更新）
 - **13媒体の「Row not found」を修正し、本番実行で確認済み**。目視での「半角スペース＋全角括弧」推測が誤りだったことを確認し、実際のDOM表記（スペースなし）に合わせて`publishers`配列を修正。`test/fix-13-publisher-names`ブランチで全68媒体の本番同条件実行（run `32795175768`）を行い、**68/68成功・0失敗**（アップロード68件確認）。`main`にマージ・push済み（`86d3539`）。長らく続いていた表記ズレ問題はこれで解消。
 
