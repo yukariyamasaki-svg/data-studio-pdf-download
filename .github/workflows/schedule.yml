@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '0 0 3 * *'  # 毎月3日 00:00 UTC
   workflow_dispatch:    # 手動実行用
+    inputs:
+      test_publishers:
+        description: '動作確認用に絞り込む媒体名（カンマ区切り、空なら全媒体）'
+        required: false
+        type: string
 
 jobs:
   download:
@@ -32,6 +37,7 @@ jobs:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          TEST_PUBLISHERS: ${{ inputs.test_publishers }}
           KEEP_LOCAL_PDF: 'true'
         run: npm start
 

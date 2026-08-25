@@ -26,6 +26,16 @@ Webブラウザから実行することもできます。
 2. 右側の「Run workflow」ボタンをクリック。
 3. 実行したいブランチを選んで「Run workflow」。
 
+#### 一部の媒体だけ実行する（動作確認用）
+
+`test_publishers`にカンマ区切りで媒体名を指定すると、その媒体だけ処理します（後続のBox転送・ダブルチェックの動作確認など）。空なら全媒体が対象です。
+
+```bash
+gh workflow run schedule.yml --ref main -f test_publishers="36Kr Japan"
+```
+
+Webブラウザからの場合は、「Run workflow」ダイアログ内の`test_publishers`欄に入力してください。
+
 ### 2. 定期実行（何もしなくても自動で動く）
 
 毎月3日 00:00 UTC（日本時間 09:00）に自動実行されます。設定は [`.github/workflows/schedule.yml`](.github/workflows/schedule.yml) を参照してください。

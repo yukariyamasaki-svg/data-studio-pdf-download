@@ -10,7 +10,10 @@ const path = require('path');
 // owner"), so we use the normal viewer URL and get a clean PDF instead via
 // Data Studio's own "Download report" feature (see downloadReportPdfViaMenu()).
 const REPORT_URL = 'https://datastudio.google.com/u/0/reporting/6ab590f1-9fad-4bdb-8336-cd145cfbb35f/page/vnXDE';
-const DRIVE_FOLDER_ID = '1xkYmPLURyojCnzujByxWircjY3QWVlUa';
+// GAS①（自動実行_リネームとBox転送）のGOOGLE_FOLDER_IDと同じ値にすること。
+// 以前は別の未使用フォルダ（1xkYmPLURyojCnzujByxWircjY3QWVlUa）を指しており、
+// アップロードしたファイルがGAS①から一切見えていなかった（2026-08-25に発覚）。
+const DRIVE_FOLDER_ID = '1UK3wc7RJ-Mw69SxWJJ5NHNTUwVMxyea2';
 
 // NOTE: a full 71-publisher run on main (workflow run 32430266287) once
 // succeeded for the first 5 publishers, then every subsequent publisher
@@ -36,7 +39,7 @@ const DRIVE_FOLDER_ID = '1xkYmPLURyojCnzujByxWircjY3QWVlUa';
 // ONLINE(インフォグラフィック用)', and 'コルク' — genuinely have zero rows
 // in the current publisher list (confirmed the same way, not a text
 // mismatch), so they stay disabled until they have data again.
-const publishers = [
+const allPublishers = [
   '36Kr Japan',
   'ALBA Net',
   'Full-Count',
@@ -112,6 +115,14 @@ const publishers = [
   '集英社オンライン（金鍵記事 フィード版）', // newly discovered variant, added 2026-08-25
   '集英社オンライン'
 ];
+
+// TEST_PUBLISHERS: comma-separated publisher names to limit a run to (e.g.
+// for verifying the downstream Box/GAS pipeline without re-processing all
+// media). Leave unset for the normal full run.
+const testFilter = process.env.TEST_PUBLISHERS;
+const publishers = testFilter
+  ? testFilter.split(',').map(s => s.trim()).filter(name => allPublishers.includes(name))
+  : allPublishers;
 
 async function getAuthClient() {
   const clientId = process.env.GOOGLE_CLIENT_ID;
