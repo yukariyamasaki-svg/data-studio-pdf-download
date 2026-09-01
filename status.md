@@ -3,6 +3,13 @@
 ## 目的
 Looker Studio（旧Data Studio）の媒体（publisher）別レポートページをPlaywrightでPDF化し、Google Driveにアップロードするスクリプト。GitHub Actions（`.github/workflows/schedule.yml`）で毎月第三営業日（土日・日本の祝日を除く）に自動実行、`workflow_dispatch`で手動実行も可能。
 
+## 現在の状態（2026-09-01：GitHub Actions完了時のSlack通知を追加）
+- `.github/workflows/schedule.yml`の「Run download script」ステップの出力を`/tmp/download.log`に保存（`tee`、`set -o pipefail`で終了コードは維持）するように変更し、新規`notify-slack.js`を実行する「Notify Slack」ステップ（`if: always()`）を追加。ログ内の`Failed for ...`行の有無・件数と`steps.download.outcome`から、🚨全体失敗／⚠️一部媒体失敗（失敗媒体リスト付き）／✅全媒体成功の3パターンでSlackに通知する（コミット`39c9e04`）。
+- 通知先は当初、`jp-mb-scripts`側の「未実施検知アラート」（[status.md参照](../jp-mb-scripts/data-studio-pdf-download/status.md)）と同じ`bizreach-article`用のWebhookを再利用したが、投稿時に**Slackのbot表示名・アイコンがそのWebhookが属するApp（`bizreach-article`用）のまま固定され、ペイロード内の`username`/`icon_emoji`上書きが効かない**ことが判明（Slackが多くのワークスペースでこのメッセージ単位の上書きを無効化しているため）。App側の表示名・アイコンを変更すると`bizreach-article`側にも影響するため、これは避けた。
+- 対応として、`data-studio-pdf-download`専用の新しいSlack App／Incoming Webhookを作成（表示名・アイコン画像もこのApp単独で設定）し、GitHub Secretsの`SLACK_WEBHOOK_URL`をそちらに切り替えた。`notify-slack.js`のペイロードからは（効いていなかった）`username`/`icon_emoji`指定を削除。
+- ローカルで`node notify-slack.js`を直接実行し、新Webhook・新App名/アイコンで`#jp-stardust-contents`への投稿を確認済み（成功パターンのみ確認、⚠️/🚨パターンは未確認）。
+- **未検証**：次回の本番実行（2026-09-03、第三営業日09:00 JST）で実際に自動実行から通知まで一連で動くかは未確認。一部失敗・全体失敗パターンの通知文面もまだ実運用では見ていない。
+
 ## 次回セッションでやること（2026-08-31時点）
 1. `git status`で未コミットの変更（`.github/workflows/schedule.yml`, `README.md`, `package.json`, `status.md`の修正、`check-business-day.js`の新規ファイル）をコミット・push（さらに必要ならPR作成）してよいか、ユーザーに確認する（各git操作は個別に「はい」の承認を得る運用）。
 2. コミット後、可能であれば`gh workflow run schedule.yml --ref <ブランチ>`等で第三営業日判定ステップが意図通り動くか（`workflow_dispatch`は判定をスキップして常に実行されること、cron自体は次回1〜9日の実行を待つ必要があること）を確認する。
@@ -66,6 +73,7 @@ Looker Studio（旧Data Studio）の媒体（publisher）別レポートペー�
 - 新規に認証したい場合は`npm run get-refresh-token`でブラウザ経由の認証フローからrefresh tokenを取得できる（`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`は別途必要）。
 
 ## 更新履歴
+- 2026-09-01: GitHub Actions完了時（成功/失敗）のSlack通知機能を追加（`notify-slack.js`新規作成、`schedule.yml`に「Notify Slack」ステップ追加、コミット`39c9e04`）。当初`bizreach-article`用Webhookを再利用したが、Slackのbot表示名/アイコンのメッセージ単位上書きが効かないと判明し、`data-studio-pdf-download`専用の新Slack App/Webhookを作成してSecretsを切り替え。ローカルでの成功パターン通知は確認済み、本番での動作・失敗パターンの通知は次回9/3の実行で確認予定。
 - 2026-08-25（続き4）: `TEST_PUBLISHERS`フィルターを追加。検証中に`DRIVE_FOLDER_ID`がGAS①の`GOOGLE_FOLDER_ID`と一致していない（別の未使用フォルダを指していた）バグを発見・修正（`8cc8255`）、36Kr Japanでエンドツーエンド再検証。GAS①/②が完全自動（時間主導トリガー）であることを確認しREADME更新（`03100b2`）。誤フォルダのPDF407件削除、Boxテストファイル削除、突合スプレッドシートのテスト行をアーカイブシートへ移動。
 - 2026-08-25（続き）: ユーザー確認のうえ、新規発見した3表記を`publishers`配列に追加し、デバッグ用CIステップは残す方針で決定。検証用の4ブランチ（`test/multi-publisher-run`・`test/single-publisher-run`・`test/list-publishers`・`test/fix-13-publisher-names`）をリモート・ローカルとも削除。`smartnews/sn-prototyping`のPR #2331もrevert済み（PR #2337、squash-merge済み）。
 - 2026-08-25: `list-publishers.js`の全件スクロール方式が最新実行でエラー（「Could not open the publisher control in any frame」）になったため、代わりに13媒体それぞれの短い部分文字列（例:「PRESIDENT」）で検索し、該当行の`aria-label`と文字コードをダンプする`debug-remaining-publishers.js`を新規作成してローカルで実行。結果、13媒体全ての実際の表記に**括弧の直前のスペースが一切存在しない**ことが判明（例: 実際は`The Economist（ガリレオ社用）`で、`3ea51ab`で入れた半角スペースは誤り）。`publishers`配列から該当スペースを削除する修正を実施し、ローカルで13件全てが`aria-label`と文字コード単位で完全一致することを確認。また調査中に、`publishers`配列に未登録の新規表記（`PRESIDENT（旧CMS入稿用）`、`集英社オンライン（金鍵記事 CMS版）`、`集英社オンライン（金鍵記事 フィード版）`）がフィルター候補に存在することを発見——これらは今回の13媒体修正の対象外（配列に元から無かったため「Row not found」にもならず、単に収集されていない）。追加するかどうかは要判断（次回セッション）。
