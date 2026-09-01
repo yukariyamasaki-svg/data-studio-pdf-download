@@ -38,7 +38,7 @@ Webブラウザからの場合は、「Run workflow」ダイアログ内の`test
 
 ### 2. 定期実行（何もしなくても自動で動く）
 
-毎月3日 00:00 UTC（日本時間 09:00）に自動実行されます。設定は [`.github/workflows/schedule.yml`](.github/workflows/schedule.yml) を参照してください。
+**毎月第三営業日**（土日・日本の祝日を除いた3営業日目）の09:00 JSTごろに自動実行されます。cron自体は毎月1〜9日の00:00 UTC（09:00 JST）に毎日走りますが、`check-business-day.js`（`@holiday-jp/holiday_jp`で祝日判定）が「今日が第三営業日か」を判定し、そうでない日は実際のPDF生成をスキップします（対象日以外は緑のチェックで即終了）。設定は [`.github/workflows/schedule.yml`](.github/workflows/schedule.yml) を参照してください。
 
 ## 実行結果の確認方法
 

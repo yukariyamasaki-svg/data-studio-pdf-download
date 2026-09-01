@@ -2,8 +2,8 @@ name: Download Data Studio PDFs
 
 on:
   schedule:
-    - cron: '0 0 3 * *'  # 毎月3日 00:00 UTC
-  workflow_dispatch:    # 手動実行用
+    - cron: '0 0 1-9 * *'  # 毎月1〜9日 00:00 UTC（JST09:00）に判定し、第三営業日のみ実際に実行
+  workflow_dispatch:    # 手動実行用（第三営業日判定はスキップし、常に実行する）
     inputs:
       test_publishers:
         description: '動作確認用に絞り込む媒体名（カンマ区切り、空なら全媒体）'
@@ -27,12 +27,18 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Check if today is the 3rd business day (JST)
+        id: bizday
+        run: echo "run_today=$(node check-business-day.js)" >> "$GITHUB_OUTPUT"
+
       - name: Install Playwright browsers and Japanese fonts
+        if: github.event_name == 'workflow_dispatch' || steps.bizday.outputs.run_today == 'true'
         run: |
           npx playwright install chromium --with-deps
           sudo apt-get install -y fonts-noto-cjk
 
       - name: Run download script
+        if: github.event_name == 'workflow_dispatch' || steps.bizday.outputs.run_today == 'true'
         env:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
@@ -42,7 +48,7 @@ jobs:
         run: npm start
 
       - name: Upload debug artifacts
-        if: always()
+        if: always() && (github.event_name == 'workflow_dispatch' || steps.bizday.outputs.run_today == 'true')
         uses: actions/upload-artifact@v4
         with:
           name: data-studio-debug
@@ -50,7 +56,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload generated PDFs (temporary, for manual verification)
-        if: always()
+        if: always() && (github.event_name == 'workflow_dispatch' || steps.bizday.outputs.run_today == 'true')
         uses: actions/upload-artifact@v4
         with:
           name: data-studio-pdfs

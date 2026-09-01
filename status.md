@@ -1,7 +1,17 @@
 # Project Status
 
 ## 目的
-Looker Studio（旧Data Studio）の媒体（publisher）別レポートページをPlaywrightでPDF化し、Google Driveにアップロードするスクリプト。GitHub Actions（`.github/workflows/schedule.yml`）で毎月3日00:00 UTCに自動実行、`workflow_dispatch`で手動実行も可能。
+Looker Studio（旧Data Studio）の媒体（publisher）別レポートページをPlaywrightでPDF化し、Google Driveにアップロードするスクリプト。GitHub Actions（`.github/workflows/schedule.yml`）で毎月第三営業日（土日・日本の祝日を除く）に自動実行、`workflow_dispatch`で手動実行も可能。
+
+## 次回セッションでやること（2026-08-31時点）
+1. `git status`で未コミットの変更（`.github/workflows/schedule.yml`, `README.md`, `package.json`, `status.md`の修正、`check-business-day.js`の新規ファイル）をコミット・push（さらに必要ならPR作成）してよいか、ユーザーに確認する（各git操作は個別に「はい」の承認を得る運用）。
+2. コミット後、可能であれば`gh workflow run schedule.yml --ref <ブランチ>`等で第三営業日判定ステップが意図通り動くか（`workflow_dispatch`は判定をスキップして常に実行されること、cron自体は次回1〜9日の実行を待つ必要があること）を確認する。
+
+## 現在の状態（2026-08-31：PDF自動生成を「毎月3日固定」から「毎月第三営業日」に変更）
+- 依存プロジェクト（`jp-mb-scripts/data-studio-pdf-download`の`update-monthly-sheets.js`、Redashからのスプレッドシート更新）がOkta SSOのMFAの都合で完全自動化できず、「毎月2日までに手動実行」という運用ルールに落ち着いた（詳細は`jp-mb-scripts/data-studio-pdf-download/status.md`参照）。この運用と噛み合わせるため、PDF生成側も土日・祝日で日付がずれてもスプレッドシート更新の後に確実に実行されるよう、固定の「3日」から「第三営業日」判定に変更した。
+- `check-business-day.js`を新規作成。`@holiday-jp/holiday_jp`で祝日判定し、土日・祝日を除いた月内の営業日カウントが3になる日だけ`true`を返す。
+- `schedule.yml`のcronを`0 0 3 * *`から`0 0 1-9 * *`（毎月1〜9日、毎日00:00 UTC=09:00 JSTに判定）に変更。判定ステップの結果（`steps.bizday.outputs.run_today`）で以降のPlaywrightインストール・ダウンロード実行・Artifactアップロードステップをガードし、対象日以外は早期に緑チェックで終了する（`workflow_dispatch`による手動実行は判定をスキップし常に実行）。
+- ローカルで判定ロジックを検証済み：2026年1月は1/1が祝日（元日）のため第三営業日が1/6にずれる、2026年8月は祝日なしのため第三営業日が8/5になる、など想定通りの計算結果を確認。
 
 ## 現在の状態（2026-08-25 続き4：DRIVE_FOLDER_ID不一致バグを発見・修正、GAS①/②とのエンドツーエンド接続を確認）
 - `TEST_PUBLISHERS`環境変数（カンマ区切りで媒体名を指定、`workflow_dispatch`の`test_publishers`入力にも対応）を新規追加。後続のBox転送・ダブルチェックの動作確認を、全68媒体を毎回処理せず一部の媒体だけに絞って行えるようにした。
