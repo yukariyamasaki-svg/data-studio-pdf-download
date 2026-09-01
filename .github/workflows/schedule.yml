@@ -38,6 +38,7 @@ jobs:
           sudo apt-get install -y fonts-noto-cjk
 
       - name: Run download script
+        id: download
         if: github.event_name == 'workflow_dispatch' || steps.bizday.outputs.run_today == 'true'
         env:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
@@ -45,7 +46,9 @@ jobs:
           GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
           TEST_PUBLISHERS: ${{ inputs.test_publishers }}
           KEEP_LOCAL_PDF: 'true'
-        run: npm start
+        run: |
+          set -o pipefail
+          npm start 2>&1 | tee /tmp/download.log
 
       - name: Upload debug artifacts
         if: always() && (github.event_name == 'workflow_dispatch' || steps.bizday.outputs.run_today == 'true')
@@ -62,3 +65,11 @@ jobs:
           name: data-studio-pdfs
           path: /tmp/*.pdf
           if-no-files-found: ignore
+
+      - name: Notify Slack
+        if: always() && (github.event_name == 'workflow_dispatch' || steps.bizday.outputs.run_today == 'true')
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          DOWNLOAD_OUTCOME: ${{ steps.download.outcome }}
+        run: node notify-slack.js
