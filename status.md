@@ -3,6 +3,26 @@
 ## 目的
 Looker Studio（旧Data Studio）の媒体（publisher）別レポートページをPlaywrightでPDF化し、Google Driveにアップロードするスクリプト。GitHub Actions（`.github/workflows/schedule.yml`）で毎月第三営業日（土日・日本の祝日を除く）に自動実行、`workflow_dispatch`で手動実行も可能。
 
+## 現在の状態（2026-09-03：GitHub Actions本番実行は成功、GAS①のBox転送は日次quota超過で機能停止・トリガー削除）
+- 朝のcron自動実行（第三営業日09:00 JST判定）が発火していなかったため`gh workflow run schedule.yml --ref main`で手動実行（run `33700192562`）。**71媒体全件成功**、`Notify Slack`ステップも`DOWNLOAD_OUTCOME: success`で正常完了。GitHub Actions側（PDF生成・Driveアップロード・Slack通知）は問題なし。
+- 後続のGAS①（`自動実行_リネームとBox転送`、毎分の時間主導トリガー）でBox転送が進まない不具合を調査。2つの問題が連鎖していた。
+  1. **Box OAuth2トークン失効**：`getBoxService().hasAccess()`がfalseになり実行ログに「✕ 未認証: https://account.box.com/api/oauth2/authorize?...」が出続けていた。ログ内の認可URLをユーザーがブラウザで開き、Boxに再ログイン・許可して解決（ただし古いログのURLはstateトークンが期限切れで使えず、Apps Scriptエディタで関数を再実行して新しいURLを発行し直す必要があった）。
+  2. **quota超過が「フォルダが空」と誤表示される既存バグ**：再認可後も「✕ Boxフォルダが空です。」が出続けた。Box上の対象フォルダ（ID `327976722897`）をユーザー自身のBoxアカウントでブラウザから直接開くと媒体別フォルダは正常に存在しており、フォルダIDやアクセス権自体は問題なかった。原因はコード（GAS①の`getBoxFoldersDirectly`関数）が`try/catch`でBox API呼び出しの全エラー（quota超過含む）を握り潰し、レスポンス不正時に無条件で`[]`を返す実装だったため。診断用に一時追加した`debugBoxFolderItems()`（レスポンスのHTTPステータス・本文をそのままログ出力する関数）を実行したところ、実際には`Exception: Service invoked too many times for one day: premium urlfetch.`（Google Apps ScriptのURL Fetch呼び出し日次quota超過）であることが判明。フォルダは本当は空ではなかった。
+- quotaはGoogleアカウント単位・日次リセット（太平洋時間深夜0時＝日本時間で夏時間16時／冬時間17時頃）のため、当日中の復旧は不可能と判断し、**ユーザーが時間主導トリガーを削除**（quota・スクリプト合計実行時間quotaはアカウント全体で共有されるため、他のApps Scriptプロジェクトへの影響を避ける目的）。
+- **quota枯渇の推定原因**：毎分実行という頻度の高いトリガー設計に対し、今回追加したAirtable/Box連携コード（`buildFolderRecipientsMap_`、Box権限延長・コラボレーター確認、共有リンク解決など）でAPI呼び出し回数が増えたこと、および「未認証」状態が約40分続いた間の毎分実行や、調査中の手動再実行の繰り返しが積算したことが要因と推測（確定ではない）。71件のPDFはGitHub Actions側のDriveアップロードは完了しているが、**GAS①側のリネーム・Box転送・Airtable送付先への権限延長・Gmail下書き作成はまだ一度も本番で完走していない**。
+- **次回セッションでやること（最優先）**：
+  1. quotaリセット後（本日16〜17時以降、または翌日）、Apps Scriptエディタから`自動実行_リネームとBox転送()`を手動実行し、71件のPDFがリネーム→Box転送→Airtable送付先への権限延長・Gmail下書き作成まで正常に完走するか確認する。
+  2. 正常確認後、時間主導トリガーを再作成する（毎分ではなくもう少し間隔を空ける、または`DriveApp`側に処理対象ファイルが無ければBox/Airtable APIを一切呼ばずに即returnするガードを`mainFlow`冒頭に追加するなど、quota消費を抑える設計を検討）。
+  3. `getBoxFoldersDirectly`（および同様のtry/catchで握り潰している他の関数）で、quota超過等の実エラーとレスポンスの内容不備を区別してログに出すよう修正を検討する（同種の問題の再発時に原因特定を早めるため）。
+- **手動実行とcronの二重実行が発覚・対応済み**：上記の`workflow_dispatch`手動実行（00:36 UTC）の後、本来の第三営業日cron判定（09:00 JST予定）が約3時間遅延して12:22 JST頃に発火し（run `33711137343`）、同じ71媒体をもう一度生成・Driveアップロードした。`script.js`の`uploadToDrive`は既存ファイルの有無を確認せず常に新規作成するため、Drive処理対象フォルダに71件が2セット（計142件）溜まる状態になっていた。GAS①が142件を処理すると媒体ごとにGmail下書きメールが2通ずつ作成される等の重複が生じるため、ユーザーが重複セットをDrive上で削除し71件に戻した（対応済み）。**教訓**：cronは数時間遅延することがあるため、当日中に`workflow_dispatch`で手動実行する場合はcronが後から重ねて発火する可能性を考慮し、実行後はDrive側の重複有無を確認する。
+
+## 現在の状態（2026-09-01：GAS①にAirtable連携・Box権限延長・メール下書き機能を追加）
+- GAS①（`自動実行_リネームとBox転送`、このリポジトリの範囲外だが後続処理を担う既存Apps Scriptプロジェクト）に、Box転送成功時のフックとして3機能を追加：(1) Airtable（送付先管理ベース、`tag`に`レポート送付先`を含む行）からBoxフォルダ単位の送付先を取得、(2) Box viewer権限の自動延長・新規付与（SmartNewsの設定で外部コラボレーターは60日で自動失効するため）、(3) 送付先ごとの月次レポート案内メールをGmail下書きとして作成（誤送信防止のため自動送信はしない）。
+- Airtableの`BOXURL`フィールドはルックアップ型で**配列で返る**ため`Array.isArray`で単一値に変換する処理が必要だった（`buildFolderRecipientsMap_`）。
+- Gmail下書きの送信元を個人アドレスから部署共有アドレス（`jp-media-support@smartnews.com`、表示名「スマートニュース株式会社 メディアリレーション事務局」）に変更する際、`GmailApp.createDraft`の`from`/`name`オプションは下書きには効かないという既知の制限に遭遇。Advanced Gmail API（`Gmail.Users.Drafts.create`）で生MIMEメッセージを直接組み立てる方式（`buildRawEmail_`/`encodeMimeHeader_`/`chunkBase64_`）に変更し解決。日本語ヘッダーはRFC 2047 encoded-wordでエンコードが必要。
+- 本文もプレーンテキストではURLが自動リンク化されない（Gmail APIで直接作成した下書きには自動リンク化パスが走らないため）ことが判明し、`Content-Type: text/html`＋`<a href>`タグ方式に変更して解決。
+- 単体テスト（`testBoxAccessAndDraftForOneMedia()`、コルクフォルダ対象）で送信元・改行・リンクすべて確認済み。**未検証**：実PDFを使ったステップ1→2の通し、および次回のGAS①自動実行（時間主導トリガー）での本番動作確認はまだ行っていない。
+
 ## 現在の状態（2026-09-01：GitHub Actions完了時のSlack通知を追加）
 - `.github/workflows/schedule.yml`の「Run download script」ステップの出力を`/tmp/download.log`に保存（`tee`、`set -o pipefail`で終了コードは維持）するように変更し、新規`notify-slack.js`を実行する「Notify Slack」ステップ（`if: always()`）を追加。ログ内の`Failed for ...`行の有無・件数と`steps.download.outcome`から、🚨全体失敗／⚠️一部媒体失敗（失敗媒体リスト付き）／✅全媒体成功の3パターンでSlackに通知する（コミット`39c9e04`）。
 - 通知先は当初、`jp-mb-scripts`側の「未実施検知アラート」（[status.md参照](../jp-mb-scripts/data-studio-pdf-download/status.md)）と同じ`bizreach-article`用のWebhookを再利用したが、投稿時に**Slackのbot表示名・アイコンがそのWebhookが属するApp（`bizreach-article`用）のまま固定され、ペイロード内の`username`/`icon_emoji`上書きが効かない**ことが判明（Slackが多くのワークスペースでこのメッセージ単位の上書きを無効化しているため）。App側の表示名・アイコンを変更すると`bizreach-article`側にも影響するため、これは避けた。
@@ -73,6 +93,8 @@ Looker Studio（旧Data Studio）の媒体（publisher）別レポートペー�
 - 新規に認証したい場合は`npm run get-refresh-token`でブラウザ経由の認証フローからrefresh tokenを取得できる（`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`は別途必要）。
 
 ## 更新履歴
+- 2026-09-03: 第三営業日cronが未発火だったため`workflow_dispatch`で手動実行（71媒体全件成功、Slack通知も成功パターン確認）。後続のGAS①Box転送が進んでいない件を調査し、Box OAuth2トークン失効（再認可で解決）→`getBoxFoldersDirectly`のエラー握り潰しで「フォルダが空」と誤表示されていた（実体はURL Fetch日次quota超過）ことを特定。quotaリセットまで復旧不可のため時間主導トリガーを削除。次回quotaリセット後に手動実行での完走確認が最優先タスク。
+- 2026-09-01: GAS①（自動実行_リネームとBox転送）にAirtable連携・Box viewer権限自動延長・Gmail下書き作成機能を追加。Gmail下書きの送信元変更は`GmailApp.createDraft`の`from`オプションが効かないためGmail API＋生MIME方式に変更、本文リンクも`text/html`化して解決。単体テストは成功、次回のGAS①本番実行（時間主導トリガー）での実PDFを使った動作確認が次回タスク。
 - 2026-09-01: GitHub Actions完了時（成功/失敗）のSlack通知機能を追加（`notify-slack.js`新規作成、`schedule.yml`に「Notify Slack」ステップ追加、コミット`39c9e04`）。当初`bizreach-article`用Webhookを再利用したが、Slackのbot表示名/アイコンのメッセージ単位上書きが効かないと判明し、`data-studio-pdf-download`専用の新Slack App/Webhookを作成してSecretsを切り替え。ローカルでの成功パターン通知は確認済み、本番での動作・失敗パターンの通知は次回9/3の実行で確認予定。
 - 2026-08-25（続き4）: `TEST_PUBLISHERS`フィルターを追加。検証中に`DRIVE_FOLDER_ID`がGAS①の`GOOGLE_FOLDER_ID`と一致していない（別の未使用フォルダを指していた）バグを発見・修正（`8cc8255`）、36Kr Japanでエンドツーエンド再検証。GAS①/②が完全自動（時間主導トリガー）であることを確認しREADME更新（`03100b2`）。誤フォルダのPDF407件削除、Boxテストファイル削除、突合スプレッドシートのテスト行をアーカイブシートへ移動。
 - 2026-08-25（続き）: ユーザー確認のうえ、新規発見した3表記を`publishers`配列に追加し、デバッグ用CIステップは残す方針で決定。検証用の4ブランチ（`test/multi-publisher-run`・`test/single-publisher-run`・`test/list-publishers`・`test/fix-13-publisher-names`）をリモート・ローカルとも削除。`smartnews/sn-prototyping`のPR #2331もrevert済み（PR #2337、squash-merge済み）。

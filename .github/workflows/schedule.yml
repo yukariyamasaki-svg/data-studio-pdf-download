@@ -2,7 +2,7 @@ name: Download Data Studio PDFs
 
 on:
   schedule:
-    - cron: '0 0 1-9 * *'  # 毎月1〜9日 00:00 UTC（JST09:00）に判定し、第三営業日のみ実際に実行
+    - cron: '17 0 1-9 * *'  # 毎月1〜9日 00:17 UTC（JST09:17頃）に判定し、第三営業日のみ実際に実行。00:00 UTCは他リポジトリのcronが集中し遅延しやすいため17分ずらしている
   workflow_dispatch:    # 手動実行用（第三営業日判定はスキップし、常に実行する）
     inputs:
       test_publishers:
