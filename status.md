@@ -3,6 +3,22 @@
 ## 目的
 Looker Studio（旧Data Studio）の媒体（publisher）別レポートページをPlaywrightでPDF化し、Google Driveにアップロードするスクリプト。GitHub Actions（`.github/workflows/schedule.yml`）で毎月第三営業日（土日・日本の祝日を除く）に自動実行、`workflow_dispatch`で手動実行も可能。
 
+## 現在の状態（2026-10-05：Looker Studioが匿名アクセスにログインを要求するようになった問題を修正、71媒体全件成功）
+- 第三営業日のcron自動実行が発火していなかったため`workflow_dispatch`で手動実行しようとしたところ、前提となる`jp-mb-scripts`側の`update-monthly-sheets.js`（Redash→スプレッドシート更新）が今月まだ実行されていないことが先に発覚。進行中のワークフロー実行をキャンセルし、`npm run login-redash`→`TARGET_MONTH=2026-09 npm run update-sheets`を実施してから再実行する、という順序で対応した（詳細は[jp-mb-scripts側status.md](../jp-mb-scripts/data-studio-pdf-download/status.md)参照）。
+- 再実行した本番ワークフローは`conclusion: success`と表示されたが、実際にはログに**68/68（全件）が`Could not apply publisher filter`で失敗**していた。ワークフローの終了コードは媒体ごとの失敗では非ゼロにならないため、見た目の緑チェックだけでは失敗に気づけない（既知の仕様、[トラブルシューティング表](README.md#トラブルシューティング)にも記載あり）。
+- 失敗したデバッグスクリーンショット（`.debug.png`）を確認したところ、レポート本体ではなく**Googleのログイン画面**（「Sign in to continue to Data Studio」）が表示されていた。`script.js`のPlaywrightブラウザコンテキストはDrive認証用のOAuth2クライアントとは完全に別物で、元々一切ログインセッションを持たない匿名コンテキストでレポートURLに直接アクセスする設計（レポートは「リンクを知っている全員が閲覧可」で共有されている前提）。
+- ユーザーがLooker Studio側の共有設定（リンク公開/閲覧者権限）を確認・再設定し、シークレットウィンドウでは実際にログインなしでレポートが見えることを確認した。にもかかわらずGitHub Actions上では3回連続で同じログイン画面が再現（スクリーンショットがバイト単位で同一）。**2026-09-03の本番実行では同じ匿名アクセス方式で71媒体全件成功していた**ことから、ファイル単位の共有設定の問題ではなく、**Googleが匿名・ヘッドレス・データセンターIPからのLooker Studioアクセスに対する不正利用対策を2026-09以降に強化した**ことが原因と判断した。
+- **対応**：匿名アクセスをやめ、`jp-mb-scripts/data-studio-pdf-download`の`login.js`と同じ方式（Playwrightで実際にGooginログインし`storageState`を保存、`newContext()`に読み込ませる）をこのリポジトリにも導入した。
+  - 新規`login.js`（`npm run login`）でレポートを閲覧できるGoogleアカウントにログインし、`auth/google-session.json`を取得。
+  - 素のまま保存すると`myaccount.google.com`訪問時に乗ってくる`smartnews.okta.com`のlocalStorage（約100KB）が混入し、base64化後約236KBとなり**GitHub Secretsの1件あたり48KBというサイズ上限を超過**してSecret登録に失敗した。`origins`（localStorage）を空にして`cookies`のみ残す（約12KB、base64後約16KB）ことで解決。
+  - `.github/workflows/schedule.yml`に、Playwrightインストール後・ダウンロードスクリプト実行前に、Secret（`GOOGLE_SESSION_STATE_B64`）をbase64デコードして`auth/google-session.json`に復元する「Restore Google session」ステップを追加。`script.js`は`auth/google-session.json`が存在すればそれを`newContext({ storageState: ... })`に渡し、存在しなければ従来通り匿名コンテキストにフォールバックする。
+  - ログイン済みセッションを使うと、Looker Studio側のUIが**ログインアカウントのロケール（日本語）でレンダリングされる**ことが新たな問題として発覚。PDFダウンロードに使っている「More options」ボタンの検出がaria-labelの英語テキスト直接指定だったため見つからなくなった。さらに、画面右上には似た見た目のボタンが2つあり紛らわしかった：ヘッダー右端の「...」（kebab）アイコン（`id="more-options-header-menu-button"`、日本語aria-labelは「レポートに関するその他の操作」）はレポートの一般操作メニュー（データ更新・コピー作成・共有・レポート詳細など）を開くだけで**ダウンロード項目が無い**。実際にダウンロード機能があるのは「共有」ボタンに隣接する小さい▼（split-button、`class="split-button-menu-button"`、日本語aria-labelは「詳細オプション」）の方だった。デバッグ用に追加したメニュー展開後のスクリーンショット（`.menu-open.debug.png`）とHTMLダンプのaria-label一覧から特定。ロケールに依存しないよう、aria-labelのテキストマッチではなく構造的なクラス名（`button.split-button-menu-button`）で選択するよう修正。
+  - `test/google-session-auth`ブランチで上記2段階の修正を1媒体（36Kr Japan）スモークテストで確認（最終的に1回目の試行でフィルター適用・PDFダウンロード・Driveアップロードまで成功、7ページ崩れなし）してから`main`にマージ・push、ブランチ削除。
+- `main`で全71媒体の本番実行（run `37265689135`）を実施し、**71/71件成功、Slack通知も`DOWNLOAD_OUTCOME: success`で正常完了**。
+- **次回セッションでやること**：
+  1. ログインセッション（`GOOGLE_SESSION_STATE_B64`）はRedashセッション同様に将来期限切れする可能性がある。切れた場合の症状（全媒体が`Could not apply publisher filter`で失敗、デバッグ画面がGoogleログイン画面）と対処（`npm run login`→Secret再登録）はREADMEのトラブルシューティング表に追記済み。
+  2. 今回の71件successがGAS①（Box転送）・GAS②（ダブルチェック）まで時間主導トリガーで正常に完走したか、次回セッションで確認する（本リポジトリの範囲外だが、連鎖する後続処理のため）。
+
 ## 現在の状態（2026-09-04：GAS①のリネーム月ズレ・Box転送の表記ゆれマッチングを修正）
 - ユーザーから「ファイル名の月は前月にするはずがうまくいっていなかった」「Boxへの転送で表記ゆれ対応もうまくいっていない」と報告があり、GAS①（`自動実行_リネームとBox転送`）の`mainFlow`関数に3つの修正を実施（コードは[docs/gas1-mainflow-fix-2026-09-04.gs.js](docs/gas1-mainflow-fix-2026-09-04.gs.js)に参照用スナップショットあり）。
   1. **修正①（日付抽出漏れによる前月フォールバック失敗）**：Looker StudioのPDF内の日付表記が数字形式（`2026/07/01`）と英語月名形式（`Aug 1, 2026`）の2種類あり、旧コードは数字形式のみ対応で英語月名形式だと抽出失敗→「当月」にフォールバックしていた（本来は「前月」であるべき）。両形式に対応する正規表現に修正し、抽出失敗時のフォールバックも既存の`getPreviousMonthLabel_()`と同じ「前月」計算に統一。
@@ -101,6 +117,7 @@ Looker Studio（旧Data Studio）の媒体（publisher）別レポートペー�
 - 新規に認証したい場合は`npm run get-refresh-token`でブラウザ経由の認証フローからrefresh tokenを取得できる（`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`は別途必要）。
 
 ## 更新履歴
+- 2026-10-05: 第三営業日cron未発火を受けた手動実行の前段で、`jp-mb-scripts`側のRedash→スプレッドシート更新が今月未実施だったことが発覚、先に実施してから再実行。再実行時に新規不具合（Looker Studioが匿名・ヘッドレスアクセスにGoogleログインを要求するようになり全媒体失敗）を発見・修正。`login.js`でGoogleログインセッションを取得・`GOOGLE_SESSION_STATE_B64`としてSecret登録（Okta localStorageを除去しないとSecretサイズ上限を超える点に注意）、ログイン済みセッションでUIが日本語化される影響で崩れた「More options」ボタンのセレクタをロケール非依存の構造的クラス名指定に修正。`main`で全71媒体本番実行、71/71成功・Slack通知も正常完了。
 - 2026-09-03: 第三営業日cronが未発火だったため`workflow_dispatch`で手動実行（71媒体全件成功、Slack通知も成功パターン確認）。後続のGAS①Box転送が進んでいない件を調査し、Box OAuth2トークン失効（再認可で解決）→`getBoxFoldersDirectly`のエラー握り潰しで「フォルダが空」と誤表示されていた（実体はURL Fetch日次quota超過）ことを特定。quotaリセットまで復旧不可のため時間主導トリガーを削除。次回quotaリセット後に手動実行での完走確認が最優先タスク。
 - 2026-09-01: GAS①（自動実行_リネームとBox転送）にAirtable連携・Box viewer権限自動延長・Gmail下書き作成機能を追加。Gmail下書きの送信元変更は`GmailApp.createDraft`の`from`オプションが効かないためGmail API＋生MIME方式に変更、本文リンクも`text/html`化して解決。単体テストは成功、次回のGAS①本番実行（時間主導トリガー）での実PDFを使った動作確認が次回タスク。
 - 2026-09-01: GitHub Actions完了時（成功/失敗）のSlack通知機能を追加（`notify-slack.js`新規作成、`schedule.yml`に「Notify Slack」ステップ追加、コミット`39c9e04`）。当初`bizreach-article`用Webhookを再利用したが、Slackのbot表示名/アイコンのメッセージ単位上書きが効かないと判明し、`data-studio-pdf-download`専用の新Slack App/Webhookを作成してSecretsを切り替え。ローカルでの成功パターン通知は確認済み、本番での動作・失敗パターンの通知は次回9/3の実行で確認予定。
