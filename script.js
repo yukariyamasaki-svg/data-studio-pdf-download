@@ -260,7 +260,10 @@ async function downloadReportPdfViaMenu(page, publisher) {
   // canvas only, server-side, exactly as the report owner intends. This is
   // the "共有" (Share) split-button's "More options" (▼) menu, then
   // "Download report" (Japanese UI: "レポートをダウンロード").
-  const moreOptionsButton = page.locator('button[aria-label="More options"]').first();
+  // With an authenticated (non-anonymous) session, the UI renders in the
+  // account's locale (Japanese) instead of English, so the aria-label is
+  // localized too ("レポートに関するその他の操作").
+  const moreOptionsButton = page.getByRole('button', { name: /^More options$|レポートに関するその他の操作/ }).first();
   await moreOptionsButton.waitFor({ state: 'visible', timeout: 15000 });
   await moreOptionsButton.click();
   console.log('Clicked "More options" button.');
