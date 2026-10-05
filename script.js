@@ -344,7 +344,20 @@ async function main() {
   // acceptDownloads defaults to true in modern Playwright, but set it
   // explicitly since downloadReportPdfViaMenu() now relies on catching a
   // 'download' event from Data Studio's "Download report" menu item.
-  const context = await browser.newContext({ acceptDownloads: true });
+  //
+  // As of 2026-10, Google started showing a Sign-in wall for anonymous/
+  // headless access to this report even though it's shared as "anyone with
+  // the link can view" (confirmed working fine from a regular signed-out
+  // browser) — this previously wasn't the case (same anonymous approach
+  // worked through the 2026-09 run). Loading a logged-in session (see
+  // login.js) works around it.
+  const sessionPath = path.join(__dirname, 'auth', 'google-session.json');
+  const contextOptions = { acceptDownloads: true };
+  if (fs.existsSync(sessionPath)) {
+    console.log('Using saved Google session for authentication.');
+    contextOptions.storageState = sessionPath;
+  }
+  const context = await browser.newContext(contextOptions);
   const page = await context.newPage();
   await page.setViewportSize({ width: 1280, height: 1024 });
 

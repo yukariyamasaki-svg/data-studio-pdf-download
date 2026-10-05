@@ -8,6 +8,21 @@ Looker Studio（旧Data Studio）の媒体（publisher）別レポートペー�
 
 このスクリプトは基本的に**GitHub Actions上で実行**します。手元のPCにNode.jsやGoogle認証情報をセットアップする必要はありません。
 
+### 0. Googleログインセッションの準備（セッション期限切れ時のみ）
+
+2026-10以降、Looker Studioのレポートが匿名（未ログイン）・headlessブラウザからのアクセスにログイン画面を要求するようになったため、レポートへのアクセス権があるGoogleアカウントのログインセッションをGitHub Actionsに持ち込んで使っています。セッションが切れた場合は再取得が必要です。
+
+```bash
+npm install
+npm run login
+```
+
+ブラウザが開くので、レポートを閲覧できるGoogleアカウントでログインしてください。完了すると`auth/google-session.json`に保存されます。これをbase64化してGitHub Secretsの`GOOGLE_SESSION_STATE_B64`に設定します。
+
+```bash
+base64 -i auth/google-session.json | gh secret set GOOGLE_SESSION_STATE_B64
+```
+
 ### 1. 手動でワークフローを実行する（テストしたいとき）
 
 ターミナルで以下を実行します（[GitHub CLI](https://cli.github.com/) が必要、`gh auth login`で事前にログインしておいてください）。
@@ -63,7 +78,8 @@ Google Driveへのアップロードが終わったあとの処理（名前変�
 | 症状 | 対処 |
 |---|---|
 | 特定の媒体だけ `Row not found in publisher list` で失敗 | Looker Studio上の実際の表記と`script.js`の`publishers`配列の表記が一致していない可能性。`data-studio-debug` artifactの該当媒体の`.debug.png`/`.debug.html`を確認する。 |
-| 全媒体が最初から失敗する | Google Drive認証（`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_REFRESH_TOKEN`のGitHub Secrets）が失効している可能性。`get-refresh-token.js`（`npm run get-refresh-token`）でrefresh tokenを再取得し、GitHub Secretsを更新する。 |
+| 全媒体が最初から失敗する（Driveアップロードの認証エラー） | Google Drive認証（`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_REFRESH_TOKEN`のGitHub Secrets）が失効している可能性。`get-refresh-token.js`（`npm run get-refresh-token`）でrefresh tokenを再取得し、GitHub Secretsを更新する。 |
+| 全媒体が`Could not apply publisher filter`で失敗、デバッグスクリーンショットがGoogleのログイン画面 | レポートへのログインセッション（`GOOGLE_SESSION_STATE_B64`）が切れている可能性。上記「0. Googleログインセッションの準備」を再実行してSecretを更新する。 |
 | ワークフローが途中で急に全滅する | Looker Studio側のUI変更、またはブラウザの内部状態異常の可能性。まずは再実行してみる。 |
 
 より詳しい経緯・過去の不具合対応の記録は [`status.md`](status.md) を参照してください。
