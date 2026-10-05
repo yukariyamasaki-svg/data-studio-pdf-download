@@ -260,10 +260,14 @@ async function downloadReportPdfViaMenu(page, publisher) {
   // canvas only, server-side, exactly as the report owner intends. This is
   // the "共有" (Share) split-button's "More options" (▼) menu, then
   // "Download report" (Japanese UI: "レポートをダウンロード").
-  // With an authenticated (non-anonymous) session, the UI renders in the
-  // account's locale (Japanese) instead of English, so the aria-label is
-  // localized too ("レポートに関するその他の操作").
-  const moreOptionsButton = page.getByRole('button', { name: /^More options$|レポートに関するその他の操作/ }).first();
+  // This is the small ▼ dropdown that's part of the "共有"/"Share"
+  // split-button (not the separate kebab "..." icon elsewhere in the header,
+  // which opens an unrelated report-actions menu with no download item).
+  // Target it by its structural class rather than aria-label text, since an
+  // authenticated (non-anonymous) session renders the UI in the account's
+  // locale (Japanese: aria-label "詳細オプション") instead of English
+  // ("More options").
+  const moreOptionsButton = page.locator('button.split-button-menu-button').first();
   await moreOptionsButton.waitFor({ state: 'visible', timeout: 15000 });
   await moreOptionsButton.click();
   console.log('Clicked "More options" button.');
