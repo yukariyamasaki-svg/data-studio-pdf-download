@@ -1,5 +1,6 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
+const path = require('path');
 
 // One-off investigation script: open the report's "publisher" filter
 // control *without* typing anything into its search box, and dump the
@@ -33,12 +34,24 @@ async function main() {
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
-  const context = await browser.newContext();
+  // 2026-10-06: as of 2026-10, Google shows a sign-in wall for anonymous
+  // access to this report (see script.js's main() for the same fix), so a
+  // plain newContext() here just hits the login page and never finds the
+  // publisher control. Reuse the same saved session.
+  const sessionPath = path.join(__dirname, 'auth', 'google-session.json');
+  const contextOptions = {};
+  if (fs.existsSync(sessionPath)) {
+    console.log('Using saved Google session for authentication.');
+    contextOptions.storageState = sessionPath;
+  }
+  const context = await browser.newContext(contextOptions);
   const page = await context.newPage();
   await page.setViewportSize({ width: 1280, height: 1024 });
 
   await page.goto(REPORT_URL, { waitUntil: 'load', timeout: 90000 });
-  await page.waitForTimeout(8000);
+  // 2026-10-06: 8000ms wasn't enough for the authenticated/editor view to
+  // render the lego-control button (confirmed by comparing 8s vs 15s waits).
+  await page.waitForTimeout(15000);
 
   const frames = page.frames();
   console.log(`Checking ${frames.length} frame(s) for publisher control...`);

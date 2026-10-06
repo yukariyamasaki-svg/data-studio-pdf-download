@@ -43,8 +43,8 @@ const allPublishers = [
   '36Kr Japan',
   'ALBA Net',
   'Full-Count',
-  // 'Bloomberg', // DISABLED 2026-10-06: no recipient in Airtable「レポート送付先」contact export, report likely discontinued
-  // 'Fortune', // DISABLED 2026-10-06: no recipient in Airtable「レポート送付先」contact export, report likely discontinued
+  'Bloomberg',
+  'Fortune',
   'The Economist（ガリレオ社用）', // fixed: no space before full-width paren (was: 'The Economist （ガリレオ社用）')
   'The Washington Post',
   'KAI-YOU Premium',
@@ -57,7 +57,7 @@ const allPublishers = [
   // 'ONE CAREER PLUS', // TEMPORARILY DISABLED: not found in list-publishers.js output, needs investigation
   'nobico（のびこ）新フィード', // fixed: no space before full-width paren
   'nobico',
-  // 'PHPオンライン（インフォグラフィック用）', // DISABLED 2026-10-06: no recipient in Airtable「レポート送付先」contact export, report likely discontinued
+  'PHPオンライン（インフォグラフィック用）', // fixed: no space before full-width paren
   'PHPオンライン',
   'THE21オンライン',
   'WEB Voice',
@@ -84,7 +84,7 @@ const allPublishers = [
   // 'コルク', // TEMPORARILY DISABLED: not found in list-publishers.js output, needs investigation
   'SLUGGER',
   'サッカーダイジェストWeb',
-  // 'シャドーイングバディ', // DISABLED 2026-10-06: no recipient in Airtable「レポート送付先」contact export, report likely discontinued
+  'シャドーイングバディ',
   'The Japan Times Alpha',
   'The Japan Times Alpha（英語学習法）',
   'ジャパンタイムズ出版',
@@ -98,12 +98,12 @@ const allPublishers = [
   '宣伝会議',
   '広報会議',
   '販促会議',
-  // '日刊ゲンダイDIGITAL', // DISABLED 2026-10-06: no recipient in Airtable「レポート送付先」contact export, report likely discontinued
-  // 'PRESIDENT（インフォグラフィック用）', // DISABLED 2026-10-06: no recipient in Airtable「レポート送付先」contact export, report likely discontinued
-  // 'PRESIDENT（旧CMS入稿用）', // DISABLED 2026-10-06: no recipient in Airtable「レポート送付先」contact export, report likely discontinued
+  '日刊ゲンダイDIGITAL',
+  'PRESIDENT（インフォグラフィック用）', // fixed: no space before full-width paren
+  'PRESIDENT（旧CMS入稿用）', // newly discovered variant, added 2026-08-25
   'PRESIDENT',
-  // 'プレジデントオンラインアカデミー（インフォグラフィック用）', // DISABLED 2026-10-06: no recipient in Airtable「レポート送付先」contact export, report likely discontinued
-  'プレジデントオンラインアカデミー',
+  'プレジデントオンラインアカデミー（インフォグラフィック用）', // fixed: no space before full-width paren
+  // 'プレジデントオンラインアカデミー', // DISABLED 2026-10-06: list-publishers.jsの実データに括弧なしの行が存在しない（「（インフォグラフィック用）」のみ存在）
   '毎日新聞「経済プレミア」',
   '週刊エコノミスト(フィード版)',
   '現代ビジネスプレミアム（新フィード版）', // fixed: no space before full-width paren
@@ -113,7 +113,17 @@ const allPublishers = [
   '集英社オンライン（フィード版）', // fixed: no space before full-width paren
   '集英社オンライン（金鍵記事 CMS版）', // newly discovered variant, added 2026-08-25
   '集英社オンライン（金鍵記事 フィード版）', // newly discovered variant, added 2026-08-25
-  '集英社オンライン'
+  '集英社オンライン',
+  // 2026-10-06: list-publishers.jsの実データで存在を確認し、Airtable「レポート送付先」にも
+  // 受信担当者がいることを確認した新規追加分（これまで未収載）。
+  'みんかぶプレミアム（インフォグラフィック用）',
+  'フットボリスタ',
+  'プログリット',
+  '新潮QUE（金鍵記事 CMS版）',
+  '新潮QUE（銀鍵記事 CMS版）',
+  '東洋経済オンライン',
+  '毎日新聞「経済プレミア」(フィード版)',
+  '現代ビジネスプレミアム'
 ];
 
 // TEST_PUBLISHERS: comma-separated publisher names to limit a run to (e.g.
