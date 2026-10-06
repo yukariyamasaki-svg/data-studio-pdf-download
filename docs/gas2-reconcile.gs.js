@@ -77,7 +77,20 @@ function startReconcile() {
 
         console.log(`新規解析: ${folder.name} / ${file.name}`);
         const extractedText = extractTextFromBoxFile(file.id, accessToken);
-        const isMatch = checkMatch(folder.name, file.name, extractedText);
+        const ocrFailed = extractedText === "抽出失敗";
+        const matchResult = checkMatch(folder.name, file.name, extractedText);
+
+        // 2026-10-06追記：OCR抽出に失敗した場合、ファイル名一致だけで
+        // 「✅一致」と表示されると本文の二重チェックが機能していないことが
+        // 見えなくなるため、OCR失敗時は別ステータスで区別する。
+        let resultLabel;
+        if (!matchResult.isMatch) {
+          resultLabel = ocrFailed ? "❌不一致（OCR失敗）" : "❌不一致";
+        } else if (ocrFailed && matchResult.matchedBy === 'filename') {
+          resultLabel = "⚠️OCR失敗（ファイル名のみ一致）";
+        } else {
+          resultLabel = "✅一致";
+        }
 
         // シートへ書き込み
         sheet.appendRow([
@@ -85,7 +98,7 @@ function startReconcile() {
           folder.name,
           file.name,
           extractedText.substring(0, 100).replace(/\n/g, " "),
-          isMatch ? "✅一致" : "❌不一致"
+          resultLabel
         ]);
 
         processedFiles.push(String(file.name));
@@ -156,9 +169,14 @@ function manageHistory(ss, currentSheet) {
 
 /**
  * 部分一致・表記ゆれ対応判定関数
+ *
+ * 2026-10-06追記：戻り値を bool から { isMatch, matchedBy } に変更。
+ * OCR抽出テキストでの一致（matchedBy: 'text'）とファイル名のみの一致
+ * （matchedBy: 'filename'）を呼び出し側で区別できるようにした
+ * （OCR失敗時にファイル名一致だけで「✅一致」に見えてしまう問題への対応）。
  */
 function checkMatch(folderName, fileName, text) {
-  if (!folderName) return false;
+  if (!folderName) return { isMatch: false, matchedBy: 'none' };
 
   const normalize = (str) => {
     if (!str) return "";
@@ -172,40 +190,68 @@ function checkMatch(folderName, fileName, text) {
   const nText = normalize(text);
 
   let keywords = folderName.split(/[・,，\/／\s （\(\)）]/).filter(k => k.length > 0);
-  if (keywords.length === 0) return false;
+  if (keywords.length === 0) return { isMatch: false, matchedBy: 'none' };
 
-  return keywords.some(kw => {
+  let matchedByText = false;
+  let matchedByFileName = false;
+
+  keywords.forEach(kw => {
     const nKw = normalize(kw);
-    if (nKw.length < 2) return false;
-    return nFileName.indexOf(nKw) !== -1 || nText.indexOf(nKw) !== -1;
+    if (nKw.length < 2) return;
+    if (nText.indexOf(nKw) !== -1) matchedByText = true;
+    if (nFileName.indexOf(nKw) !== -1) matchedByFileName = true;
   });
+
+  if (matchedByText) return { isMatch: true, matchedBy: 'text' };
+  if (matchedByFileName) return { isMatch: true, matchedBy: 'filename' };
+  return { isMatch: false, matchedBy: 'none' };
 }
 
 /**
  * Boxファイルからテキスト（OCR）抽出
+ *
+ * 2026-10-06追記：72件を連続処理すると「User rate limit exceeded for OCR」で
+ * 抽出失敗が多発していたため、(1) OCR成功後に待機を入れて呼び出し間隔を空ける、
+ * (2) レート制限エラー時はリトライする、の2点を追加。
  */
 function extractTextFromBoxFile(fileId, token) {
-  try {
-    const url = `https://api.box.com/2.0/files/${fileId}/content`;
-    const res = UrlFetchApp.fetch(url, {
-      headers: { 'Authorization': 'Bearer ' + token },
-      muteHttpExceptions: true
-    });
+  const MAX_RETRIES = 3;
+  const BASE_WAIT_MS = 3000; // リトライ時の待機（1回目3秒、2回目6秒...）
+  const THROTTLE_WAIT_MS = 1500; // OCR成功時も次の呼び出しまで空ける待機
 
-    if (res.getResponseCode() !== 200) {
-      console.error(`Boxファイル取得エラー (File ID: ${fileId}, HTTP ${res.getResponseCode()})`);
-      return "抽出失敗";
-    }
+  const url = `https://api.box.com/2.0/files/${fileId}/content`;
+  const res = UrlFetchApp.fetch(url, {
+    headers: { 'Authorization': 'Bearer ' + token },
+    muteHttpExceptions: true
+  });
 
-    const blob = res.getBlob();
-    const tempFile = Drive.Files.insert({ title: 'temp', mimeType: blob.getContentType() }, blob, { ocr: true, ocrLanguage: 'ja' });
-    const text = DocumentApp.openById(tempFile.id).getBody().getText();
-    Drive.Files.remove(tempFile.id);
-    return text;
-  } catch (e) {
-    console.error(`OCR処理失敗 (File ID: ${fileId}):`, e.toString());
+  if (res.getResponseCode() !== 200) {
+    console.error(`Boxファイル取得エラー (File ID: ${fileId}, HTTP ${res.getResponseCode()})`);
     return "抽出失敗";
   }
+
+  const blob = res.getBlob();
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const tempFile = Drive.Files.insert({ title: 'temp', mimeType: blob.getContentType() }, blob, { ocr: true, ocrLanguage: 'ja' });
+      const text = DocumentApp.openById(tempFile.id).getBody().getText();
+      Drive.Files.remove(tempFile.id);
+      Utilities.sleep(THROTTLE_WAIT_MS);
+      return text;
+    } catch (e) {
+      const isRateLimit = e.toString().toLowerCase().indexOf('rate limit') !== -1;
+      if (isRateLimit && attempt < MAX_RETRIES) {
+        const waitMs = BASE_WAIT_MS * attempt;
+        console.warn(`OCRレート制限のため${waitMs}ms待機してリトライします (File ID: ${fileId}, ${attempt}回目)`);
+        Utilities.sleep(waitMs);
+        continue;
+      }
+      console.error(`OCR処理失敗 (File ID: ${fileId}):`, e.toString());
+      return "抽出失敗";
+    }
+  }
+  return "抽出失敗";
 }
 
 /**

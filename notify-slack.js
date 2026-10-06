@@ -15,15 +15,20 @@ function buildText() {
     const list = failedLines.map((line) => `- ${line.slice('Failed for '.length)}`).join('\n');
     return `⚠️ PDF生成が完了しましたが、${failedLines.length}媒体が失敗しました:\n${list}\n${RUN_URL}`;
   }
-  return `✅ PDF生成が完了しました（全媒体成功）: ${RUN_URL}`;
+  return null;
 }
 
-const data = JSON.stringify({ text: buildText() });
-const req = https.request(SLACK_WEBHOOK_URL, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-});
-req.on('error', (err) => {
-  console.error('Slack通知の送信に失敗しました:', err);
-});
-req.end(data);
+const text = buildText();
+if (!text) {
+  console.log('全媒体成功のため、Slack通知は送信しません。');
+} else {
+  const data = JSON.stringify({ text });
+  const req = https.request(SLACK_WEBHOOK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  req.on('error', (err) => {
+    console.error('Slack通知の送信に失敗しました:', err);
+  });
+  req.end(data);
+}

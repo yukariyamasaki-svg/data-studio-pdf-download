@@ -75,7 +75,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Notify Slack
-        if: always() && (github.event_name == 'workflow_dispatch' || steps.bizday.outputs.run_today == 'true')
+        if: always() && github.event_name == 'schedule' && steps.bizday.outputs.run_today == 'true'
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
