@@ -14,6 +14,17 @@
  *   - splitFolderKeywordsの分割対象から空白(\s)を除外し、複数語の媒体名を1キーワードとして保持。
  *   - 修正②（キーワード単位の基本名比較）を完全一致だけでなく双方向部分一致（includes）も許容。
  *
+ * 修正⑤の内容（2026-10-06、Gmail下書きの重複送信対応）:
+ *   - 課題：1人の担当者が複数媒体を兼任している場合（例: Gengo様がNYT/WaPo/Fortune/
+ *     Bloomberg/Economistの5媒体を担当）、従来はファイル（媒体）ごとに成功時点で
+ *     即座にcreateNotificationDraft_を呼んでいたため、担当媒体数分の下書きが別々に
+ *     作られてしまっていた。
+ *   - 対応：mainFlow内に`notificationQueue_`（担当者emailごとに{name, items:[{mediaName, boxUrl}]}
+ *     を保持するオブジェクト）を追加。ファイルループ中はここに積むだけにし、ループ終了後に
+ *     担当者ごとに1回だけ`createConsolidatedNotificationDraft_`を呼んで全媒体分のリンクを
+ *     まとめた1件のメール下書きを作成する。単一媒体向けの`createNotificationDraft_`は
+ *     `testBoxAccessAndDraftForOneMedia`のテスト用途でのみ残している。
+ *
  * 本体に貼り付けてApps Scriptプロジェクト全体を置き換えることを想定。
  * 定数（BOX_CLIENT_ID, BOX_CLIENT_SECRET, BOX_PARENT_FOLDER_ID, GOOGLE_FOLDER_ID,
  * SPREADSHEET_ID, AIRTABLE_BASE_ID, AIRTABLE_TABLE_ID等）はこのファイルに含まれていないため、
@@ -46,6 +57,9 @@ function mainFlow(runMode) {
   if (boxFolders.length === 0) return Logger.log('✕ Boxフォルダが空です。');
 
   const folderRecipientsMap = (runMode === 'upload') ? buildFolderRecipientsMap_(accessToken) : {};
+  // 修正⑤（2026-10-06）: 通知メールは実行全体を通して担当者（email）ごとに1件へまとめるため、
+  // ファイルループ中は下書きを作らずここに積んでおき、ループ終了後にまとめて作成する。
+  const notificationQueue_ = {};
 
   const files = DriveApp.getFolderById(GOOGLE_FOLDER_ID).getFiles();
 
@@ -270,9 +284,12 @@ function mainFlow(runMode) {
             if (recipients.length > 0) {
               const accessResults = extendBoxAccessForFolder_(matchedFolderId, recipients, accessToken);
               accessResults.forEach(r => Logger.log('  Box権限[' + r.email + ']: ' + r.status));
+              // 修正⑤: ここでは下書きを作らず、担当者ごとに媒体名・リンクをキューへ積むだけにする
               recipients.forEach(r => {
-                const draftStatus = createNotificationDraft_(r, foundMediaName);
-                Logger.log('  通知メール下書き[' + r.email + ']: ' + draftStatus);
+                if (!notificationQueue_[r.email]) {
+                  notificationQueue_[r.email] = { name: r.name, items: [] };
+                }
+                notificationQueue_[r.email].items.push({ mediaName: foundMediaName, boxUrl: r.boxUrl });
               });
             } else {
               Logger.log('  ⚠️ Airtableに送付先が見つかりませんでした（' + matchedFolderName + '）。権限延長・通知メールはスキップ。');
@@ -288,6 +305,14 @@ function mainFlow(runMode) {
       }
     }
   }
+
+  // 修正⑤ここまで: ファイルループ終了後、担当者ごとに積んだ媒体をまとめて1件の下書きにする
+  Object.keys(notificationQueue_).forEach(email => {
+    const entry = notificationQueue_[email];
+    const draftStatus = createConsolidatedNotificationDraft_(email, entry.name, entry.items);
+    Logger.log('通知メール下書き[' + email + ']（' + entry.items.length + '媒体分を1件にまとめ）: ' + draftStatus);
+  });
+
   Logger.log('--- すべての処理が完了しました ---');
 }
 
@@ -626,6 +651,55 @@ function createNotificationDraft_(recipient, mediaName) {
     return 'drafted';
   } catch (e) {
     Logger.log('✕ メール下書き作成失敗 [' + recipient.email + ']: ' + e.message);
+    return 'failed';
+  }
+}
+
+/**
+ * 修正⑤（2026-10-06）: 複数媒体を兼任する担当者向けに、媒体ごとに別々の下書きを作らず
+ * 1件のメールに全媒体分のリンクをまとめて記載する。createNotificationDraft_の
+ * 複数媒体版（mainFlowのnotificationQueue_から呼ばれる）。
+ */
+function createConsolidatedNotificationDraft_(email, name, items) {
+  const monthLabel = getPreviousMonthLabel_();
+  const displayName = name ? name + '様' : 'ご担当者様';
+  const subject = '[スマートニュース＋] ' + monthLabel + '度分 月次レポートのご案内';
+
+  const linksHtml = items
+    .map(item => '・' + escapeHtml_(item.mediaName) + '：<a href="' + item.boxUrl + '">' + escapeHtml_(item.boxUrl) + '</a>')
+    .join('<br>');
+
+  const htmlBody =
+    escapeHtml_(displayName) + '<br><br>' +
+    '平素より大変お世話になっております。スマートニュースメディアリレーション事務局です。<br><br>' +
+    'いつも「スマートニュース＋」へ記事をご提供いただき、誠にありがとうございます。<br><br>' +
+    '「スマートニュース＋」の先月分レポートをBOXに保管いたしました。是非ともご活用いただければ幸いです。<br>' +
+    linksHtml + '<br><br>' +
+    'ご不都合な点やご不明な点がございましたら、お気軽にご連絡くださいませ。<br>' +
+    '引き続き、どうぞよろしくお願い申し上げます。<br><br>' +
+    '-----------------------------------------------------------------<br>' +
+    'スマートニュース株式会社 メディアリレーション事務局<br><br>' +
+    ' ▼お問い合わせフォーム<br>' +
+    '<a href="https://publishers.smartnews.com/hc/ja/requests/new">https://publishers.smartnews.com/hc/ja/requests/new</a><br><br>' +
+    ' ▼SmartNews媒体運営者向けサポートサイト<br>' +
+    '<a href="https://publishers.smartnews.com/">https://publishers.smartnews.com/</a><br><br>' +
+    ' ▼SmartNews<br>' +
+    '<a href="https://www.smartnews.com/">https://www.smartnews.com/</a>';
+
+  const rawEmail = buildRawEmail_(
+    'スマートニュース株式会社 メディアリレーション事務局',
+    'jp-media-support@smartnews.com',
+    email,
+    subject,
+    htmlBody
+  );
+  const encodedMessage = Utilities.base64EncodeWebSafe(rawEmail, Utilities.Charset.UTF_8);
+
+  try {
+    Gmail.Users.Drafts.create({ message: { raw: encodedMessage } }, 'me');
+    return 'drafted';
+  } catch (e) {
+    Logger.log('✕ メール下書き作成失敗 [' + email + ']: ' + e.message);
     return 'failed';
   }
 }
