@@ -38,8 +38,8 @@ jobs:
           echo "(本文は /tmp/without-auth.html に保存、先頭200文字のみ表示)"
           head -c 200 /tmp/without-auth.html; echo
 
-          echo "--- Bearerトークン付きでGAS①を呼び出し ---"
-          curl -sS --max-time 30 -X POST "$GAS1_WEBAPP_URL" \
+          echo "--- Bearerトークン付きでGAS①を呼び出し（リダイレクトを追跡） ---"
+          curl -sS -L --max-time 30 -X POST "$GAS1_WEBAPP_URL" \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Content-Type: application/json" \
             -d "{\"secret\":\"$GAS1_TRIGGER_SECRET\"}" \
