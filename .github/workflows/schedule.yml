@@ -78,6 +78,7 @@ jobs:
         if: always() && github.event_name == 'schedule' && steps.bizday.outputs.run_today == 'true'
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           DOWNLOAD_OUTCOME: ${{ steps.download.outcome }}
         run: node notify-slack.js
