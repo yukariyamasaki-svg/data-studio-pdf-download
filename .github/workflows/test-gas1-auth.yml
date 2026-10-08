@@ -1,0 +1,46 @@
+name: Test GAS① auth (temporary)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mint OAuth access token and call GAS① webapp
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          GAS1_WEBAPP_URL: ${{ secrets.GAS1_WEBAPP_URL }}
+          GAS1_TRIGGER_SECRET: ${{ secrets.GAS1_TRIGGER_SECRET }}
+        run: |
+          echo "--- アクセストークンを発行中 ---"
+          TOKEN_RESPONSE=$(curl -sS --max-time 20 -X POST https://oauth2.googleapis.com/token \
+            -d client_id="$GOOGLE_CLIENT_ID" \
+            -d client_secret="$GOOGLE_CLIENT_SECRET" \
+            -d refresh_token="$GOOGLE_REFRESH_TOKEN" \
+            -d grant_type=refresh_token)
+          ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
+          if [ "$ACCESS_TOKEN" = "null" ] || [ -z "$ACCESS_TOKEN" ]; then
+            echo "✕ アクセストークンの発行に失敗しました:"
+            echo "$TOKEN_RESPONSE"
+            exit 1
+          fi
+          echo "◯ アクセストークン発行成功"
+
+          echo "--- Bearerトークン無しでGAS①を呼び出し（ドメイン制限の再現確認） ---"
+          curl -sS --max-time 30 -X POST "$GAS1_WEBAPP_URL" \
+            -H "Content-Type: application/json" \
+            -d "{\"secret\":\"$GAS1_TRIGGER_SECRET\"}" \
+            -o /tmp/without-auth.html \
+            -w "HTTP_STATUS:%{http_code}\n"
+          echo "(本文は /tmp/without-auth.html に保存、先頭200文字のみ表示)"
+          head -c 200 /tmp/without-auth.html; echo
+
+          echo "--- Bearerトークン付きでGAS①を呼び出し ---"
+          curl -sS --max-time 30 -X POST "$GAS1_WEBAPP_URL" \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"secret\":\"$GAS1_TRIGGER_SECRET\"}" \
+            -w "\nHTTP_STATUS:%{http_code}\n"
