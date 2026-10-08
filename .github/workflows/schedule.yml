@@ -78,13 +78,31 @@ jobs:
       - name: Trigger GAS①（リネーム・Box転送）
         if: github.event_name == 'schedule' && steps.bizday.outputs.run_today == 'true' && steps.download.outcome == 'success'
         env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
           GAS1_WEBAPP_URL: ${{ secrets.GAS1_WEBAPP_URL }}
           GAS1_TRIGGER_SECRET: ${{ secrets.GAS1_TRIGGER_SECRET }}
         run: |
-          curl -sS --max-time 30 -X POST "$GAS1_WEBAPP_URL" \
-            -H "Content-Type: application/json" \
-            -d "{\"secret\":\"$GAS1_TRIGGER_SECRET\"}" \
-            || echo "⚠️ GAS①へのプッシュ起動に失敗しました（低頻度の時間主導トリガーがフォールバックとして拾います）"
+          # GAS①のWebアプリは「SmartNews, Inc内の全員」デプロイのみ選択可能（Workspace管理者ポリシー）
+          # のため、未認証の素のPOSTは401で拒否される。既存のDriveアップロード用Google OAuth
+          # クレデンシャル（smartnews.comドメインの実ユーザー）でアクセストークンを発行し、
+          # Bearerトークンとして付与することでドメイン制限を通過させる。
+          ACCESS_TOKEN=$(curl -sS --max-time 20 -X POST https://oauth2.googleapis.com/token \
+            -d client_id="$GOOGLE_CLIENT_ID" \
+            -d client_secret="$GOOGLE_CLIENT_SECRET" \
+            -d refresh_token="$GOOGLE_REFRESH_TOKEN" \
+            -d grant_type=refresh_token | jq -r '.access_token')
+
+          if [ "$ACCESS_TOKEN" = "null" ] || [ -z "$ACCESS_TOKEN" ]; then
+            echo "⚠️ GAS①起動用アクセストークンの発行に失敗しました（低頻度の時間主導トリガーがフォールバックとして拾います）"
+          else
+            curl -sS --max-time 30 -X POST "$GAS1_WEBAPP_URL" \
+              -H "Authorization: Bearer $ACCESS_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"secret\":\"$GAS1_TRIGGER_SECRET\"}" \
+              || echo "⚠️ GAS①へのプッシュ起動に失敗しました（低頻度の時間主導トリガーがフォールバックとして拾います）"
+          fi
 
       - name: Upload debug artifacts
         if: always() && (github.event_name == 'workflow_dispatch' || steps.bizday.outputs.run_today == 'true')
