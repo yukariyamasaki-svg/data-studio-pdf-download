@@ -31,6 +31,23 @@ jobs:
         id: bizday
         run: echo "run_today=$(node check-business-day.js)" >> "$GITHUB_OUTPUT"
 
+      - name: Restore Redash session
+        if: github.event_name == 'schedule' && steps.bizday.outputs.run_today == 'true'
+        env:
+          REDASH_SESSION_STATE_B64: ${{ secrets.REDASH_SESSION_STATE_B64 }}
+        run: |
+          mkdir -p auth
+          echo "$REDASH_SESSION_STATE_B64" | base64 -d > auth/redash-session.json
+
+      - name: Update monthly sheets
+        if: github.event_name == 'schedule' && steps.bizday.outputs.run_today == 'true'
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_SHEETS_REFRESH_TOKEN: ${{ secrets.GOOGLE_SHEETS_REFRESH_TOKEN }}
+          SKIP_CONFIRM: 'true'
+        run: node update-monthly-sheets.js
+
       - name: Install Playwright browsers and Japanese fonts
         if: github.event_name == 'workflow_dispatch' || steps.bizday.outputs.run_today == 'true'
         run: |
@@ -57,6 +74,17 @@ jobs:
         run: |
           set -o pipefail
           npm start 2>&1 | tee /tmp/download.log
+
+      - name: Trigger GAS①（リネーム・Box転送）
+        if: github.event_name == 'schedule' && steps.bizday.outputs.run_today == 'true' && steps.download.outcome == 'success'
+        env:
+          GAS1_WEBAPP_URL: ${{ secrets.GAS1_WEBAPP_URL }}
+          GAS1_TRIGGER_SECRET: ${{ secrets.GAS1_TRIGGER_SECRET }}
+        run: |
+          curl -sS --max-time 30 -X POST "$GAS1_WEBAPP_URL" \
+            -H "Content-Type: application/json" \
+            -d "{\"secret\":\"$GAS1_TRIGGER_SECRET\"}" \
+            || echo "⚠️ GAS①へのプッシュ起動に失敗しました（低頻度の時間主導トリガーがフォールバックとして拾います）"
 
       - name: Upload debug artifacts
         if: always() && (github.event_name == 'workflow_dispatch' || steps.bizday.outputs.run_today == 'true')

@@ -3,7 +3,7 @@ const { exec } = require('child_process');
 const { google } = require('googleapis');
 const url = require('url');
 
-const SCOPES = ['https://www.googleapis.com/auth/drive'];
+const SCOPES = [process.env.OAUTH_SCOPE || 'https://www.googleapis.com/auth/drive'];
 const PORT = 3000;
 const CALLBACK_PATH = '/oauth2callback';
 
@@ -84,10 +84,11 @@ async function main() {
       console.log('\n==== OAuth2 Refresh Token ====>');
       console.log(tokens.refresh_token || 'No refresh token returned.');
       console.log('==== Copy the refresh token above and set it in your environment variable ====>');
+      const refreshTokenEnvName = SCOPES[0].endsWith('/spreadsheets') ? 'GOOGLE_SHEETS_REFRESH_TOKEN' : 'GOOGLE_REFRESH_TOKEN';
       console.log('\nAlso set these environment variables:');
       console.log('  GOOGLE_CLIENT_ID');
       console.log('  GOOGLE_CLIENT_SECRET');
-      console.log('  GOOGLE_REFRESH_TOKEN');
+      console.log(`  ${refreshTokenEnvName}`);
     } catch (error) {
       res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('Failed to exchange authorization code.');
